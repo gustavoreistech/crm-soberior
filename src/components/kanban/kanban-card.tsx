@@ -4,7 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Lead } from "@/types/lead";
 import { STATUS_FUNIL_COLORS } from "@/config/constants";
-import { Building2, User, DollarSign, TrendingUp } from "lucide-react";
+import { Building2, Target, TrendingUp } from "lucide-react";
 
 interface KanbanCardProps {
   lead: Lead;
@@ -20,7 +20,7 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
     transition,
     isDragging,
   } = useSortable({
-    id: lead.ID,
+    id: lead.id,
     data: { type: "lead", lead },
   });
 
@@ -30,7 +30,7 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const statusColor = STATUS_FUNIL_COLORS[lead.Status_Funil] || "#1E3A5F";
+  const statusColor = STATUS_FUNIL_COLORS[lead.status] || "#1E3A5F";
 
   return (
     <div
@@ -48,40 +48,44 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
           style={{ backgroundColor: statusColor }}
         />
         <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider">
-          {lead.Status_Funil}
+          {lead.status}
         </span>
       </div>
 
-      {/* Lead Name & Company */}
+      {/* Organization Name */}
       <h3 className="text-sm font-medium text-white mb-1 truncate">
-        {lead.Nome}
+        {lead.organization.name}
       </h3>
-      <div className="flex items-center gap-1.5 text-xs text-[#94A3B8] mb-3">
-        <Building2 className="w-3 h-3" />
-        <span className="truncate">{lead.Empresa}</span>
-      </div>
+      {lead.organization.domain && (
+        <div className="flex items-center gap-1.5 text-xs text-[#94A3B8] mb-3">
+          <Building2 className="w-3 h-3" />
+          <span className="truncate">{lead.organization.domain}</span>
+        </div>
+      )}
 
       {/* Metrics */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1 text-[#64748B]">
-            <DollarSign className="w-3 h-3" />
-            <span>Ads</span>
+        {lead.score !== null && (
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-[#64748B]">
+              <Target className="w-3 h-3" />
+              <span>Score</span>
+            </div>
+            <span className="font-mono text-[#F2C14E]">{lead.score}</span>
           </div>
-          <span className="font-mono text-[#F2C14E]">
-            R$ {lead.Investimento_Ads.toLocaleString("pt-BR")}
-          </span>
-        </div>
+        )}
 
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1 text-[#64748B]">
-            <TrendingUp className="w-3 h-3" />
-            <span>ROAS</span>
+        {lead.lostRevenue !== null && (
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-[#64748B]">
+              <TrendingUp className="w-3 h-3" />
+              <span>Receita Perdida</span>
+            </div>
+            <span className="font-mono text-[#EF4444]">
+              R$ {lead.lostRevenue.toLocaleString("pt-BR")}
+            </span>
           </div>
-          <span className="font-mono text-[#22C55E]">
-            {lead.ROAS.toFixed(2)}x
-          </span>
-        </div>
+        )}
       </div>
 
       {/* Hover hint */}

@@ -1,14 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllLeads, createLead, ensureLeadsSheetExists } from "@/lib/sheets/leads";
-import { LeadInput } from "@/types/lead";
+import { prisma } from "@/lib/prisma";
 import { ApiResponse } from "@/types/api";
+import { CreateLeadPayload, STATUS_MAP } from "@/types/lead";
 
 export async function GET(): Promise<NextResponse<ApiResponse>> {
   try {
-    await ensureLeadsSheetExists();
-    const leads = await getAllLeads();
+    const leads = await prisma.lead.findMany({
+      include: {
+        organization: true,
+      },
+      orderBy: { id: "asc" },
+    });
 
-    return NextResponse.json({ success: true, data: leads });
+    const mapped = leads.map((lead) => ({
+      id: lead.id,
+      organizationId: lead.organizationId,
+      status: STATUS_MAP[lead.status] ?? lead.status,
+      score: lead.score,
+      lostRevenue: lead.lostRevenue,
+      organization: {
+        id: lead.organization.id,
+        name: lead.organization.name,
+        cnpj: lead.organization.cnpj,
+        domain: lead.organization.domain,
+        stapeId: lead.organization.stapeId,
+        isActive: lead.organization.isActive,
+      },
+    }));
+
+    return NextResponse.json({ success: true, data: mapped });
   } catch (error) {
     console.error("Erro ao listar leads:", error);
     return NextResponse.json(
@@ -25,23 +45,63 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse>> {
   try {
-    await ensureLeadsSheetExists();
-    const body: LeadInput = await request.json();
+    const body: CreateLeadPayload = await request.json();
 
-    if (!body.Nome || !body.Empresa || !body.Telefone) {
+    if (!body.name) {
       return NextResponse.json(
         {
           success: false,
-          error: "Campos obrigatórios: Nome, Empresa, Telefone",
+          error: "Campos obrigatórios: name",
         },
         { status: 400 }
       );
     }
 
-    const lead = await createLead(body);
+    // Cria Organization e Lead atrelado em uma transação
+    const result = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: body.name,
+          cnpj: body.cnpj ?? null,
+          domain: body.domain ?? null,
+        },
+      });
+
+      const statusDb = body.status
+        ? body.status
+        : "PROSPECT";
+
+      const lead = await tx.lead.create({
+        data: {
+          organizationId: organization.id,
+          status: statusDb,
+        },
+        include: { organization: true },
+      });
+
+      return lead;
+    });
 
     return NextResponse.json(
-      { success: true, data: lead, message: "Lead criado com sucesso" },
+      {
+        success: true,
+        data: {
+          id: result.id,
+          organizationId: result.organizationId,
+          status: STATUS_MAP[result.status] ?? result.status,
+          score: result.score,
+          lostRevenue: result.lostRevenue,
+          organization: {
+            id: result.organization.id,
+            name: result.organization.name,
+            cnpj: result.organization.cnpj,
+            domain: result.organization.domain,
+            stapeId: result.organization.stapeId,
+            isActive: result.organization.isActive,
+          },
+        },
+        message: "Lead criado com sucesso",
+      },
       { status: 201 }
     );
   } catch (error) {

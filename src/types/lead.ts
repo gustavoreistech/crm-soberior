@@ -15,64 +15,51 @@ export const STATUS_FUNIL_OPTIONS: StatusFunil[] = [
   "Inadimplente",
 ];
 
-export interface Lead {
-  ID: string;
-  Nome: string;
-  Empresa: string;
-  Telefone: string;
-  Email: string;
-  Status_Funil: StatusFunil;
-  Investimento_Ads: number;
-  Conversoes: number;
-  ROAS: number;
-  Perda_Estimada: number;
-  Valor_Perdido: number;
-  Data_Criacao: string;
-  Data_Atualizacao: string;
-  Dados_DeepSeek: string | null;
-}
-
-export type LeadInput = {
-  Nome: string;
-  Empresa: string;
-  Telefone: string;
-  email?: string;
-  Status_Funil?: StatusFunil;
-  Investimento_Ads?: number;
-  Conversoes?: number;
-  ROAS?: number;
+/** Mapeamento entre status em inglês (banco) e português (exibição) */
+export const STATUS_MAP: Record<string, StatusFunil> = {
+  PROSPECT: "Prospecção",
+  AUDIT_REQUESTED: "Audit Solicitado",
+  PROPOSAL_SENT: "Proposta Enviada",
+  CLOSED_WON: "Fechado/Ganho",
+  ONBOARDING: "Onboarding",
+  DELINQUENT: "Inadimplente",
 };
 
-export interface LeadRow {
-  ID: string;
-  Nome: string;
-  Empresa: string;
-  Telefone: string;
-  Email: string;
-  Status_Funil: StatusFunil;
-  Investimento_Ads: string;
-  Conversoes: string;
-  ROAS: string;
-  Perda_Estimada: string;
-  Valor_Perdido: string;
-  Data_Criacao: string;
-  Data_Atualizacao: string;
-  Dados_DeepSeek: string;
+export const STATUS_REVERSE_MAP: Record<StatusFunil, string> = {
+  "Prospecção": "PROSPECT",
+  "Audit Solicitado": "AUDIT_REQUESTED",
+  "Proposta Enviada": "PROPOSAL_SENT",
+  "Fechado/Ganho": "CLOSED_WON",
+  "Onboarding": "ONBOARDING",
+  "Inadimplente": "DELINQUENT",
+};
+
+/** Organização simplificada vinculada ao Lead (vinda da API) */
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  domain: string | null;
+  stapeId: string | null;
+  isActive: boolean;
 }
 
-export const LEAD_HEADERS: (keyof LeadRow)[] = [
-  "ID",
-  "Nome",
-  "Empresa",
-  "Telefone",
-  "Email",
-  "Status_Funil",
-  "Investimento_Ads",
-  "Conversoes",
-  "ROAS",
-  "Perda_Estimada",
-  "Valor_Perdido",
-  "Data_Criacao",
-  "Data_Atualizacao",
-  "Dados_DeepSeek",
-];
+/** Lead conforme retornado pela API (baseado nos tipos gerados pelo Prisma Client) */
+export interface Lead {
+  id: string;
+  organizationId: string;
+  status: StatusFunil;
+  score: number | null;
+  lostRevenue: number | null;
+  organization: OrganizationSummary;
+}
+
+/** Payload para criar um Lead via API */
+export interface CreateLeadPayload {
+  name: string;
+  cnpj?: string | null;
+  domain?: string | null;
+  telefone?: string;
+  email?: string;
+  status?: string;
+}

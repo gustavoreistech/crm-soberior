@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAndUpdateSignature } from "@/lib/sheets/signature-logs";
+import { verifyCode } from "@/lib/code-store";
 import { ApiResponse, Validate2FAPayload } from "@/types/api";
 
 export async function POST(
@@ -15,16 +15,9 @@ export async function POST(
       );
     }
 
-    // Obtém IP do cliente
-    const ip =
-      body.ip ||
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
+    const result = verifyCode(body.leadId, body.codigo);
 
-    const result = await verifyAndUpdateSignature(body.leadId, body.codigo, ip);
-
-    if (!result.success) {
+    if (!result.valid) {
       return NextResponse.json(
         { success: false, error: result.message },
         { status: 401 }

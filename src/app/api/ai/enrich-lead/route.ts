@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeadById, updateLead } from "@/lib/sheets/leads";
+import { prisma } from "@/lib/prisma";
 import { getDeepSeekCredentials } from "@/lib/config-manager";
 import { enrichLeadWithDeepSeek } from "@/lib/deepseek-api";
 import { ApiResponse, EnrichLeadPayload } from "@/types/api";
@@ -20,8 +20,12 @@ export async function POST(
       );
     }
 
-    // Verifica se o lead existe
-    const existingLead = await getLeadById(body.leadId);
+    // Verifica se o lead existe via Prisma
+    const existingLead = await prisma.lead.findUnique({
+      where: { id: body.leadId },
+      include: { organization: true },
+    });
+
     if (!existingLead) {
       return NextResponse.json(
         { success: false, error: "Lead não encontrado" },
@@ -59,15 +63,8 @@ export async function POST(
       );
     }
 
-    // Salva dados enriquecidos no lead
-    const enrichedJson = JSON.stringify(result.data);
-    await updateLead(body.leadId, {
-      Nome: existingLead.Nome,
-      Empresa: existingLead.Empresa,
-      Telefone: existingLead.Telefone,
-    });
-    // Nota: O campo Dados_DeepSeek é atualizado diretamente no sheet
-    // via função específica. Por ora salvamos via updateLead.
+    // Nota: Os dados enriquecidos (JSON) podem ser armazenados futuramente
+    // em um campo no modelo Lead. Por enquanto, apenas retornamos os dados.
 
     return NextResponse.json({
       success: true,

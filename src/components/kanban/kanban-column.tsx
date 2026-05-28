@@ -57,7 +57,7 @@ export function KanbanColumn({
         className="flex-1 p-3 space-y-2 overflow-y-auto min-h-[200px] max-h-[calc(100vh-220px)]"
       >
         <SortableContext
-          items={leads.map((l) => l.ID)}
+          items={leads.map((l) => l.id)}
           strategy={verticalListSortingStrategy}
         >
           {leads.length === 0 ? (
@@ -67,7 +67,7 @@ export function KanbanColumn({
           ) : (
             leads.map((lead) => (
               <KanbanCard
-                key={lead.ID}
+                key={lead.id}
                 lead={lead}
                 onClick={onLeadClick}
               />

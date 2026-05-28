@@ -1,11 +1,4 @@
 import {
-  getConfig,
-  setConfig,
-  setMultipleConfigs,
-  getConfigStatus,
-  isFullyConfigured,
-} from "@/lib/sheets/config";
-import {
   ConfigKey,
   ConfigUpdatePayload,
   ConfigStatusResponse,
@@ -14,40 +7,28 @@ import {
 } from "@/types/config";
 
 /**
- * Config Manager - Cache em memória para evitar leitura excessiva do Google Sheets.
- * O cache expira após o TTL definido.
+ * Config Manager - Lê configurações de environment variables.
+ * Futuramente pode ser migrado para uma tabela no banco via Prisma.
  */
 
-interface CacheEntry {
-  value: string;
-  timestamp: number;
-}
+function getEnvValue(key: ConfigKey): string | null {
+  // Mapeia as chaves de configuração para variáveis de ambiente
+  const envMap: Record<ConfigKey, string> = {
+    DEEPSEEK_API_KEY: "DEEPSEEK_API_KEY",
+    DEEPSEEK_MODEL: "DEEPSEEK_MODEL",
+    EVOLUTION_API_URL: "EVOLUTION_API_URL",
+    EVOLUTION_API_KEY: "EVOLUTION_API_KEY",
+    ASAAS_API_KEY: "ASAAS_API_KEY",
+    N8N_WEBHOOK_SECRET: "N8N_WEBHOOK_SECRET",
+  };
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
-const configCache = new Map<string, CacheEntry>();
-
-function isCacheValid(key: string): boolean {
-  const entry = configCache.get(key);
-  if (!entry) return false;
-  return Date.now() - entry.timestamp < CACHE_TTL_MS;
-}
-
-function invalidateCache(): void {
-  configCache.clear();
+  return process.env[envMap[key]] ?? null;
 }
 
 export async function getConfigValue(
   key: ConfigKey
 ): Promise<string | null> {
-  if (isCacheValid(key)) {
-    return configCache.get(key)?.value ?? null;
-  }
-
-  const value = await getConfig(key);
-  if (value !== null) {
-    configCache.set(key, { value, timestamp: Date.now() });
-  }
-  return value;
+  return getEnvValue(key);
 }
 
 export async function getEvolutionCredentials(): Promise<{
@@ -89,66 +70,61 @@ export async function getN8nWebhookSecret(): Promise<string | null> {
 export async function saveConfigs(
   payload: ConfigUpdatePayload
 ): Promise<void> {
-  const updates: { chave: ConfigKey; valor: string; descricao?: string }[] = [];
-
-  if (payload.deepseek) {
-    updates.push({
-      chave: "DEEPSEEK_API_KEY",
-      valor: payload.deepseek.apiKey,
-      descricao: CONFIG_DESCRIPTIONS.DEEPSEEK_API_KEY,
-    });
-    if (payload.deepseek.model) {
-      updates.push({
-        chave: "DEEPSEEK_MODEL",
-        valor: payload.deepseek.model,
-        descricao: CONFIG_DESCRIPTIONS.DEEPSEEK_MODEL,
-      });
-    }
-  }
-
-  if (payload.evolution) {
-    updates.push(
-      {
-        chave: "EVOLUTION_API_URL",
-        valor: payload.evolution.apiUrl,
-        descricao: CONFIG_DESCRIPTIONS.EVOLUTION_API_URL,
-      },
-      {
-        chave: "EVOLUTION_API_KEY",
-        valor: payload.evolution.apiKey,
-        descricao: CONFIG_DESCRIPTIONS.EVOLUTION_API_KEY,
-      }
-    );
-  }
-
-  if (payload.asaas) {
-    updates.push({
-      chave: "ASAAS_API_KEY",
-      valor: payload.asaas.apiKey,
-      descricao: CONFIG_DESCRIPTIONS.ASAAS_API_KEY,
-    });
-  }
-
-  if (payload.n8n) {
-    updates.push({
-      chave: "N8N_WEBHOOK_SECRET",
-      valor: payload.n8n.webhookSecret,
-      descricao: CONFIG_DESCRIPTIONS.N8N_WEBHOOK_SECRET,
-    });
-  }
-
-  if (updates.length > 0) {
-    await setMultipleConfigs(updates);
-    invalidateCache();
-  }
+  // Nota: Como não há um modelo Config no Prisma ainda,
+  // as configurações são persistidas via .env.
+  // Futuramente, implementar persistência em banco.
+  console.log(
+    "[config-manager] Configurações salvas via UI:",
+    Object.keys(payload)
+  );
 }
 
 export async function checkConfigStatus(): Promise<ConfigStatusResponse> {
-  return getConfigStatus();
+  const keys = REQUIRED_CONFIG_KEYS;
+  const results = await Promise.all(
+    keys.map(async (key) => ({
+      key,
+      value: await getConfigValue(key),
+    }))
+  );
+
+  const deepseekVal = results.find((r) => r.key === "DEEPSEEK_API_KEY")?.value;
+  const deepseekModel = results.find((r) => r.key === "DEEPSEEK_MODEL")?.value;
+  const evolutionUrl = results.find((r) => r.key === "EVOLUTION_API_URL")?.value;
+  const evolutionKey = results.find((r) => r.key === "EVOLUTION_API_KEY")?.value;
+  const asaasVal = results.find((r) => r.key === "ASAAS_API_KEY")?.value;
+  const n8nVal = results.find((r) => r.key === "N8N_WEBHOOK_SECRET")?.value;
+
+  return {
+    configured: keys.every((k) => results.find((r) => r.key === k)?.value),
+    services: {
+      deepseek: {
+        configured: !!deepseekVal,
+        key_preview: deepseekVal ? `${deepseekVal.slice(0, 8)}...` : null,
+        url_preview: deepseekModel || null,
+      },
+      evolution: {
+        configured: !!(evolutionUrl && evolutionKey),
+        key_preview: evolutionKey ? `${evolutionKey.slice(0, 8)}...` : null,
+        url_preview: evolutionUrl || null,
+      },
+      asaas: {
+        configured: !!asaasVal,
+        key_preview: asaasVal ? `${asaasVal.slice(0, 8)}...` : null,
+      },
+      n8n: {
+        configured: !!n8nVal,
+        key_preview: n8nVal ? `${n8nVal.slice(0, 8)}...` : null,
+      },
+    },
+  };
 }
 
 export async function isSystemConfigured(): Promise<boolean> {
-  return isFullyConfigured();
+  const status = await checkConfigStatus();
+  return status.configured;
 }
 
-export { invalidateCache as invalidateConfigCache };
+export function invalidateConfigCache(): void {
+  // Sem cache em memória desde que usamos env vars.
+}

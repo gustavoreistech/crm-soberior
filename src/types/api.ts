@@ -21,6 +21,9 @@ export interface AsaasWebhookPayload {
     id: string;
     value: number;
     customer: string;
+    dueDate: string;
+    externalReference?: string;
+    metadata?: Record<string, string>;
   };
   subscription?: {
     id: string;

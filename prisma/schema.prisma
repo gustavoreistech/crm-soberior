@@ -1,0 +1,59 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+model Organization {
+  id            String   @id @default(uuid())
+  name          String
+  cnpj          String?  @unique
+  domain        String?
+  stapeId       String?
+  isActive      Boolean  @default(true)
+  users         User[]
+  leads         Lead[]
+  projects      Project[]
+  subscriptions Subscription[]
+}
+
+model User {
+  id             String       @id @default(uuid())
+  email          String       @unique
+  passwordHash   String
+  role           String       @default("CLIENT")
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+}
+
+model Lead {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  status         String       @default("PROSPECT")
+  score          Int?
+  lostRevenue    Float?
+}
+
+model Project {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  stage          String       @default("ONBOARDING")
+  uptimeStatus   Float        @default(100.0)
+  lastQBR        DateTime?
+}
+
+model Subscription {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  asaasId        String       @unique
+  planType       String
+  mrrValue       Float
+  status         String
+  dueDate        DateTime
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createLead, ensureLeadsSheetExists } from "@/lib/sheets/leads";
+import { prisma } from "@/lib/prisma";
 import { getN8nWebhookSecret } from "@/lib/config-manager";
 import { N8N_WEBHOOK_SECRET_HEADER } from "@/config/constants";
 import { ApiResponse, N8nWebhookPayload } from "@/types/api";
@@ -19,7 +19,6 @@ export async function POST(
       );
     }
 
-    await ensureLeadsSheetExists();
     const body: N8nWebhookPayload = await request.json();
 
     if (!body.nome || !body.empresa || !body.telefone) {
@@ -32,20 +31,29 @@ export async function POST(
       );
     }
 
-    const lead = await createLead({
-      Nome: body.nome,
-      Empresa: body.empresa,
-      Telefone: body.telefone,
-      email: body.email,
-      Investimento_Ads: body.investimento_ads ?? 0,
-      Conversoes: body.conversoes ?? 0,
-      ROAS: body.roas ?? 0,
+    // Cria Organization e Lead via Prisma em transação
+    const lead = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: body.empresa,
+        },
+      });
+
+      const created = await tx.lead.create({
+        data: {
+          organizationId: organization.id,
+          status: "PROSPECT",
+        },
+        include: { organization: true },
+      });
+
+      return created;
     });
 
     return NextResponse.json(
       {
         success: true,
-        data: { leadId: lead.ID },
+        data: { leadId: lead.id },
         message: "Lead criado via webhook n8n",
       },
       { status: 201 }

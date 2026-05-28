@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSignatureLog, ensureSignatureLogsSheetExists } from "@/lib/sheets/signature-logs";
 import { getEvolutionCredentials } from "@/lib/config-manager";
 import { sendWhatsAppMessage } from "@/lib/evolution-api";
 import { CODE_2FA_LENGTH } from "@/config/constants";
+import { storeCode } from "@/lib/code-store";
 import { ApiResponse, Generate2FAPayload } from "@/types/api";
 
 function generate2FACode(): string {
@@ -18,7 +18,6 @@ export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse>> {
   try {
-    await ensureSignatureLogsSheetExists();
     const body: Generate2FAPayload = await request.json();
 
     if (!body.leadId || !body.telefone) {
@@ -44,8 +43,8 @@ export async function POST(
     // Gera código 2FA
     const codigo = generate2FACode();
 
-    // Salva no Google Sheets
-    await createSignatureLog(body.leadId, body.telefone, codigo);
+    // Armazena em memória para validação posterior
+    storeCode(body.leadId, codigo, body.telefone);
 
     // Envia via WhatsApp
     const message = `🔐 *Soberior OS - Código de Verificação*\n\nSeu código para assinatura digital é:\n\n*${codigo}*\n\nEste código expira em 5 minutos.\n\nSe você não solicitou este código, ignore esta mensagem.`;
@@ -59,7 +58,6 @@ export async function POST(
 
     if (!whatsappResult.success) {
       console.error("Falha ao enviar WhatsApp:", whatsappResult.error);
-      // Ainda retorna sucesso pois o código foi gerado, mesmo que o WhatsApp falhe
     }
 
     return NextResponse.json(

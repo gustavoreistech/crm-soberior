@@ -28,7 +28,7 @@ export function KanbanBoard() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px de distância antes de ativar o drag
+        distance: 8,
       },
     })
   );
@@ -54,12 +54,12 @@ export function KanbanBoard() {
   }, [fetchLeads]);
 
   const getColumnLeads = (status: StatusFunil): Lead[] => {
-    return leads.filter((lead) => lead.Status_Funil === status);
+    return leads.filter((lead) => lead.status === status);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
     const leadId = event.active.id as string;
-    const lead = leads.find((l) => l.ID === leadId);
+    const lead = leads.find((l) => l.id === leadId);
     if (lead) setActiveLead(lead);
   };
 
@@ -73,21 +73,25 @@ export function KanbanBoard() {
     const dropTarget = over.data.current;
 
     // Se soltou em uma coluna
-    const targetStatus = dropTarget?.status || over.id.toString().replace("column-", "");
-    if (!targetStatus || !STATUS_FUNIL_OPTIONS.includes(targetStatus as StatusFunil)) {
+    const targetStatus =
+      dropTarget?.status || over.id.toString().replace("column-", "");
+    if (
+      !targetStatus ||
+      !STATUS_FUNIL_OPTIONS.includes(targetStatus as StatusFunil)
+    ) {
       return;
     }
 
     const newStatus = targetStatus as StatusFunil;
-    const lead = leads.find((l) => l.ID === leadId);
-    if (!lead || lead.Status_Funil === newStatus) return;
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || lead.status === newStatus) return;
 
     // Otimistic update
     setLeads((prev) =>
-      prev.map((l) => (l.ID === leadId ? { ...l, Status_Funil: newStatus } : l))
+      prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
     );
 
-    // Persistir no Google Sheets
+    // Persistir no banco via Prisma
     try {
       const response = await fetch(`/api/leads/${leadId}/status`, {
         method: "PATCH",
@@ -100,7 +104,7 @@ export function KanbanBoard() {
         // Reverte em caso de erro
         setLeads((prev) =>
           prev.map((l) =>
-            l.ID === leadId ? { ...l, Status_Funil: lead.Status_Funil } : l
+            l.id === leadId ? { ...l, status: lead.status } : l
           )
         );
         toast.error("Erro ao atualizar status do lead");
@@ -109,7 +113,7 @@ export function KanbanBoard() {
       // Reverte em caso de erro de rede
       setLeads((prev) =>
         prev.map((l) =>
-          l.ID === leadId ? { ...l, Status_Funil: lead.Status_Funil } : l
+          l.id === leadId ? { ...l, status: lead.status } : l
         )
       );
       toast.error("Erro de rede ao atualizar lead");

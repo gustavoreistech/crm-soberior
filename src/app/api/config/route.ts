@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkConfigStatus, saveConfigs } from "@/lib/config-manager";
-import { ensureConfigsSheetExists } from "@/lib/sheets/config";
 import { ConfigUpdatePayload } from "@/types/config";
 import { ApiResponse } from "@/types/api";
 
 export async function GET(): Promise<NextResponse<ApiResponse>> {
   try {
-    await ensureConfigsSheetExists();
     const status = await checkConfigStatus();
 
     return NextResponse.json({
@@ -32,7 +30,6 @@ export async function PUT(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse>> {
   try {
-    await ensureConfigsSheetExists();
     const payload: ConfigUpdatePayload = await request.json();
 
     if (!payload || Object.keys(payload).length === 0) {

@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLeadById, updateLeadStatus } from "@/lib/sheets/leads";
+import { prisma } from "@/lib/prisma";
 import { ApiResponse, AsaasWebhookPayload } from "@/types/api";
-import { StatusFunil } from "@/types/lead";
-import { getAsaasApiKey } from "@/lib/config-manager";
 
 /**
- * Valida se o IP de origem é do Asaas.
- * Nota: O Asaas usa ranges de IP específicos que podem ser configurados.
+ * Calcula a diferença em dias úteis entre duas datas.
+ * Considera apenas dias de semana (segunda a sexta) como úteis.
  */
-function isTrustedAsaasIp(ip: string | null): boolean {
-  if (!ip) return false;
-  // Implementar validação de IP do Asaas se necessário
-  // Por enquanto, confia no header de API Key
-  return true;
+function businessDaysBetween(start: Date, end: Date): number {
+  let count = 0;
+  const current = new Date(start);
+
+  while (current < end) {
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  return count;
 }
 
 export async function POST(
@@ -28,50 +34,115 @@ export async function POST(
       );
     }
 
-    // Valida API Key do Asaas se configurada
-    const asaasApiKey = await getAsaasApiKey();
-    const requestApiKey = request.headers.get("asaas-api-key");
-
-    if (asaasApiKey && requestApiKey !== asaasApiKey) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    let newStatus: StatusFunil | null = null;
-
-    switch (body.event) {
-      case "PAYMENT_RECEIVED":
-        newStatus = "Onboarding";
-        break;
-      case "PAYMENT_OVERDUE":
-        newStatus = "Inadimplente";
-        break;
-    }
-
-    if (!newStatus) {
+    // ──────────────────────────────────────────────
+    // Kill Switch: processa apenas PAYMENT_OVERDUE
+    // ──────────────────────────────────────────────
+    if (body.event !== "PAYMENT_OVERDUE") {
       return NextResponse.json({
         success: true,
-        message: `Evento ${body.event} ignorado`,
+        message: `Evento ${body.event} ignorado pelo Kill Switch`,
       });
     }
 
-    // Nota: Idealmente, o Asaas enviaria o leadId ou customer reference.
-    // Como o Asaas usa o próprio ID, você precisa de um mapeamento.
-    // Por enquanto, esse webhook serve como trigger para buscar o lead correto.
-    // O customer do Asaas deve ter um field "externalReference" com o leadId.
+    // Busca a Subscription pelo asaasId
+    // O asaasId pode vir no payload como:
+    //   - payment.customer (ID do cliente no Asaas)
+    //   - payment.metadata (chave definida na integração)
+    //   - subscription.id (ID da assinatura no Asaas)
+    const asaasId =
+      body.payment.customer ??
+      body.payment.metadata?.asaasSubscriptionId ??
+      body.subscription?.id;
+
+    if (!asaasId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "asaasId não encontrado no payload — nenhum dos campos " +
+            "(payment.customer, payment.metadata.asaasSubscriptionId, subscription.id) está presente",
+        },
+        { status: 400 }
+      );
+    }
+
+    const subscription = await prisma.subscription.findUnique({
+      where: { asaasId },
+      include: { organization: true },
+    });
+
+    if (!subscription) {
+      return NextResponse.json({
+        success: true,
+        message: `Nenhuma Subscription encontrada para asaasId "${asaasId}"`,
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // Verifica se já passaram mais de 5 dias úteis
+    // desde a data de vencimento
+    // ──────────────────────────────────────────────
+    const today = new Date();
+    const dueDate = new Date(body.payment.dueDate);
+    const businessDaysOverdue = businessDaysBetween(dueDate, today);
+
+    if (businessDaysOverdue <= 5) {
+      return NextResponse.json({
+        success: true,
+        message: `Apenas ${businessDaysOverdue} dias úteis de atraso. Limiar de 5 não atingido.`,
+        data: { businessDaysOverdue, threshold: 5 },
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // KILL SWITCH — aciona o bloqueio
+    // ──────────────────────────────────────────────
+
+    // 1. Desativa a Organization
+    await prisma.organization.update({
+      where: { id: subscription.organizationId },
+      data: { isActive: false },
+    });
+
+    // 2. Atualiza a Subscription para OVERDUE
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { status: "OVERDUE" },
+    });
+
+    // 3. Dispara POST para o webhook do n8n com o stapeId
+    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL_KILLSWITCH;
+    const stapeId = subscription.organization.stapeId;
+
+    if (n8nWebhookUrl && stapeId) {
+      // Fire-and-forget: não bloqueia o retorno do webhook
+      fetch(n8nWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stapeId,
+          organizationId: subscription.organizationId,
+          event: "KILL_SWITCH_TRIGGERED",
+          reason: `Pagamento vencido há ${businessDaysOverdue} dias úteis`,
+          subscriptionId: subscription.id,
+        }),
+      }).catch((err) =>
+        console.error("Erro ao notificar n8n Kill Switch:", err)
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Webhook Asaas processado: ${body.event}`,
+      message: `Kill Switch acionado para organização ${subscription.organizationId}`,
       data: {
         event: body.event,
-        newStatus,
+        organizationId: subscription.organizationId,
+        businessDaysOverdue,
+        stapeId,
       },
     });
   } catch (error) {
-    console.error("Erro no webhook Asaas:", error);
+    console.error("Erro no webhook Asaas (Kill Switch):", error);
     return NextResponse.json(
       {
         success: false,
