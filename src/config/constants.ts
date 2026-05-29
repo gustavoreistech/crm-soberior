@@ -1,7 +1,7 @@
 import { StatusFunil } from "@/types/lead";
 
-export const APP_NAME = "Soberior OS";
-export const APP_TAGLINE = "CRM B2B Autônomo";
+export const APP_NAME = "SOBERIOR";
+export const APP_TAGLINE = "AI & Data Analytics";
 
 export const SHEET_NAMES = {
   LEADS: "Leads",

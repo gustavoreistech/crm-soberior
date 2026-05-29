@@ -19,7 +19,7 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Soberior OS — CRM B2B Autônomo",
+  title: "SOBERIOR — AI & Data Analytics",
   description:
     "Sistema de CRM e Gestão B2B. Gerencie todo o ciclo de vida do cliente: Prospecção, Auditoria, Fechamento, Onboarding e MRR.",
   icons: {

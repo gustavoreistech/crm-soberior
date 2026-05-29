@@ -44,8 +44,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#0B1320]">
       <div className="w-full max-w-sm p-8 rounded-xl bg-[#143D59] border border-[#1E293B]">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-[#F2C14E]">Soberior OS</h1>
-          <p className="text-sm text-[#94A3B8] mt-1">CRM B2B Autônomo</p>
+          <h1 className="text-2xl font-bold text-[#F2C14E]">SOBERIOR</h1>
+          <p className="text-sm text-[#94A3B8] mt-1">AI & Data Analytics</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

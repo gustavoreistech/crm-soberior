@@ -52,7 +52,7 @@ export default function DashboardPage() {
           Olá, {session?.user?.name || "Cliente"}
         </h1>
         <p className="text-sm text-[#94A3B8] mt-1">
-          Bem-vindo ao portal do cliente Soberior OS
+          Bem-vindo ao portal do cliente SOBERIOR
         </p>
       </div>
 
