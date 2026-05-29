@@ -28,10 +28,6 @@ interface ConfigStatus {
 export default function SettingsPage() {
   const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [googleStatus, setGoogleStatus] = useState<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
 
   const fetchConfigs = useCallback(async () => {
     try {
@@ -48,29 +44,9 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const checkGoogleSheet = useCallback(async () => {
-    try {
-      const response = await fetch("/api/config");
-      if (response.ok) {
-        setGoogleStatus({ ok: true, message: "Google Sheets conectado" });
-      } else {
-        setGoogleStatus({
-          ok: false,
-          message: "Falha na conexão com Google Sheets",
-        });
-      }
-    } catch {
-      setGoogleStatus({
-        ok: false,
-        message: "Erro ao conectar com Google Sheets",
-      });
-    }
-  }, []);
-
   useEffect(() => {
     fetchConfigs();
-    checkGoogleSheet();
-  }, [fetchConfigs, checkGoogleSheet]);
+  }, [fetchConfigs]);
 
   const handleSave = async (
     service: string,
@@ -106,39 +82,6 @@ export default function SettingsPage() {
         />
 
         <main className="flex-1 overflow-y-auto p-8">
-          {/* Google Sheets Status */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-[#143D59] border border-[#1E293B]">
-              <Database className="w-5 h-5 text-[#1F7A8C]" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">
-                  Google Sheets
-                </p>
-                <p className="text-xs text-[#94A3B8]">
-                  Conexão bootstrap via .env.local
-                </p>
-              </div>
-              {googleStatus ? (
-                <div className="flex items-center gap-2">
-                  {googleStatus.ok ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-red-400" />
-                  )}
-                  <span
-                    className={`text-xs font-mono ${
-                      googleStatus.ok ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {googleStatus.message}
-                  </span>
-                </div>
-              ) : (
-                <Skeleton className="w-40 h-5 bg-[#0B1320]" />
-              )}
-            </div>
-          </div>
-
           {/* Config Cards Grid */}
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

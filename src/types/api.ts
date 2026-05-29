@@ -31,12 +31,12 @@ export interface AsaasWebhookPayload {
 }
 
 export interface Generate2FAPayload {
-  leadId: string;
-  telefone: string;
+  phone: string;
+  organizationId: string;
 }
 
 export interface Validate2FAPayload {
-  leadId: string;
+  organizationId: string;
   codigo: string;
   ip?: string;
 }

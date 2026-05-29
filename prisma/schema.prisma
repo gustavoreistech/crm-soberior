@@ -12,6 +12,8 @@ model Organization {
   name          String
   cnpj          String?  @unique
   domain        String?
+  email         String?
+  telefone      String?
   stapeId       String?
   isActive      Boolean  @default(true)
   users         User[]
@@ -21,12 +23,14 @@ model Organization {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  email          String       @unique
-  passwordHash   String
-  role           String       @default("CLIENT")
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  id                    String       @id @default(uuid())
+  email                 String       @unique
+  passwordHash          String
+  role                  String       @default("CLIENT")
+  organizationId        String?
+  organization          Organization? @relation(fields: [organizationId], references: [id])
+  twoFactorCode         String?
+  twoFactorCodeExpiresAt DateTime?
 }
 
 model Lead {
@@ -56,4 +60,11 @@ model Subscription {
   mrrValue       Float
   status         String
   dueDate        DateTime
+}
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

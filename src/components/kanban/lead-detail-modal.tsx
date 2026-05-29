@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Lead } from "@/types/lead";
 import { STATUS_FUNIL_COLORS } from "@/config/constants";
 import {
@@ -8,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import {
   Building2,
   Globe,
@@ -15,22 +17,150 @@ import {
   TrendingUp,
   BadgeCheck,
   FileText,
+  Sparkles,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface LeadDetailModalProps {
   lead: Lead | null;
   open: boolean;
+  /** Callback disparado quando o lead é atualizado (ex: enrich, mudança de status) */
+  onLeadUpdate?: (updatedLead: Lead) => void;
   onOpenChange: (open: boolean) => void;
 }
 
 export function LeadDetailModal({
   lead,
   open,
+  onLeadUpdate,
   onOpenChange,
 }: LeadDetailModalProps) {
+  const [enriching, setEnriching] = useState(false);
+  const [approving, setApproving] = useState(false);
+
+  // Early return se não há lead — após este ponto, "lead" é não-nulo
   if (!lead) return null;
 
-  const statusColor = STATUS_FUNIL_COLORS[lead.status] || "#1E3A5F";
+  // Referência local estável para uso dentro de closures assíncronas
+  const currentLead: Lead = lead;
+
+  const statusColor = STATUS_FUNIL_COLORS[currentLead.status] || "#1E3A5F";
+
+  /** Analisa o lead com DeepSeek e atualiza score/lostRevenue */
+  async function handleEnrichLead() {
+    setEnriching(true);
+    const toastId = toast.loading("Analisando lead com DeepSeek...");
+
+    try {
+      const response = await fetch("/api/ai/enrich-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: currentLead.id }),
+      });
+
+      const result: {
+        success: boolean;
+        data?: { score: number; lostRevenue: number };
+        error?: string;
+      } = await response.json();
+
+      if (!result.success || !result.data) {
+        toast.error(result.error || "Falha ao analisar lead", { id: toastId });
+        return;
+      }
+
+      toast.success("Lead analisado com sucesso!", { id: toastId });
+
+      // Notifica o board (pai) sobre a atualização de score/lostRevenue
+      onLeadUpdate?.({
+        ...currentLead,
+        score: result.data.score,
+        lostRevenue: result.data.lostRevenue,
+      });
+    } catch (error) {
+      console.error("[enrich-lead] Erro de rede:", error);
+      toast.error("Erro de rede ao analisar lead", { id: toastId });
+    } finally {
+      setEnriching(false);
+    }
+  }
+
+  /** Aprova o lead (WON) e dispara a esteira de onboarding no n8n */
+  async function handleApproveAndOnboarding() {
+    setApproving(true);
+    const toastId = toast.loading(
+      "Aprovando lead e iniciando onboarding..."
+    );
+
+    try {
+      // 1. Atualiza o status para "Fechado/Ganho" (CLOSED_WON)
+      const statusResponse = await fetch(
+        `/api/leads/${currentLead.id}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "Fechado/Ganho" }),
+        }
+      );
+
+      const statusResult: {
+        success: boolean;
+        data?: { status: string };
+        error?: string;
+      } = await statusResponse.json();
+
+      if (!statusResult.success || !statusResult.data) {
+        toast.error(
+          statusResult.error || "Falha ao atualizar status do lead",
+          { id: toastId }
+        );
+        return;
+      }
+
+      // 2. Dispara o onboarding no n8n
+      const onboardingResponse = await fetch(
+        "/api/projects/trigger-onboarding",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId: currentLead.organizationId,
+          }),
+        }
+      );
+
+      const onboardingResult: {
+        success: boolean;
+        error?: string;
+      } = await onboardingResponse.json();
+
+      if (!onboardingResult.success) {
+        toast.error(
+          onboardingResult.error || "Falha ao iniciar onboarding",
+          { id: toastId }
+        );
+        return;
+      }
+
+      toast.success(
+        "Lead aprovado e onboarding iniciado com sucesso!",
+        { id: toastId }
+      );
+
+      // Notifica o board sobre a mudança de status
+      onLeadUpdate?.({
+        ...currentLead,
+        status: statusResult.data.status as Lead["status"],
+      });
+    } catch (error) {
+      console.error("[approve] Erro de rede:", error);
+      toast.error("Erro de rede ao aprovar lead", { id: toastId });
+    } finally {
+      setApproving(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,6 +264,51 @@ export function LeadDetailModal({
               </div>
             </div>
           )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-2 pt-2 border-t border-[#1E293B]">
+            {lead.score === null && (
+              <Button
+                variant="outline"
+                className="w-full border-[#F2C14E] text-[#F2C14E] hover:bg-[#F2C14E]/10"
+                onClick={handleEnrichLead}
+                disabled={enriching}
+              >
+                {enriching ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Analisar com IA (DeepSeek)
+                  </>
+                )}
+              </Button>
+            )}
+
+            {lead.status !== "Fechado/Ganho" &&
+              lead.status !== "Onboarding" && (
+                <Button
+                  className="w-full bg-[#10B981] hover:bg-[#059669] text-white"
+                  onClick={handleApproveAndOnboarding}
+                  disabled={approving || enriching}
+                >
+                  {approving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Aprovando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Aprovar e Iniciar Onboarding
+                    </>
+                  )}
+                </Button>
+              )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

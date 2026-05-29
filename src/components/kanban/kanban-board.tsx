@@ -170,6 +170,19 @@ export function KanbanBoard() {
         onOpenChange={(open) => {
           if (!open) setSelectedLead(null);
         }}
+        onLeadUpdate={(updatedLead) => {
+          setLeads((prev) =>
+            prev.map((l) =>
+              l.id === updatedLead.id ? { ...l, ...updatedLead } : l
+            )
+          );
+          // Atualiza o selectedLead para refletir os dados no modal
+          setSelectedLead((prev) =>
+            prev?.id === updatedLead.id
+              ? { ...prev, ...updatedLead }
+              : prev
+          );
+        }}
       />
     </>
   );

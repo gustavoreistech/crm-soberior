@@ -23,6 +23,8 @@ export async function GET(): Promise<NextResponse<ApiResponse>> {
         name: lead.organization.name,
         cnpj: lead.organization.cnpj,
         domain: lead.organization.domain,
+        email: lead.organization.email,
+        telefone: lead.organization.telefone,
         stapeId: lead.organization.stapeId,
         isActive: lead.organization.isActive,
       },
@@ -64,6 +66,8 @@ export async function POST(
           name: body.name,
           cnpj: body.cnpj ?? null,
           domain: body.domain ?? null,
+          email: body.email ?? null,
+          telefone: body.telefone ?? null,
         },
       });
 
@@ -96,6 +100,8 @@ export async function POST(
             name: result.organization.name,
             cnpj: result.organization.cnpj,
             domain: result.organization.domain,
+            email: result.organization.email,
+            telefone: result.organization.telefone,
             stapeId: result.organization.stapeId,
             isActive: result.organization.isActive,
           },

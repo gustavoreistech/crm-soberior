@@ -10,6 +10,8 @@ import {
   Building2,
   Globe,
   FileText,
+  Mail,
+  Phone,
   Loader2,
   ArrowLeft,
 } from "lucide-react";
@@ -21,6 +23,8 @@ export function LeadForm() {
     name: "",
     domain: "",
     cnpj: "",
+    email: "",
+    telefone: "",
   });
 
   const handleChange = (field: string, value: string) => {
@@ -44,6 +48,8 @@ export function LeadForm() {
 
       if (formData.domain) payload.domain = formData.domain;
       if (formData.cnpj) payload.cnpj = formData.cnpj;
+      if (formData.email) payload.email = formData.email;
+      if (formData.telefone) payload.telefone = formData.telefone;
 
       const response = await fetch("/api/leads", {
         method: "POST",
@@ -116,6 +122,36 @@ export function LeadForm() {
               placeholder="00.000.000/0000-00"
               value={formData.cnpj}
               onChange={(e) => handleChange("cnpj", e.target.value)}
+              className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-[#94A3B8] text-xs flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              E-mail
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="contato@empresa.com"
+              value={formData.email}
+              onChange={(e) => handleChange("email", e.target.value)}
+              className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="telefone" className="text-[#94A3B8] text-xs flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              Telefone
+            </Label>
+            <Input
+              id="telefone"
+              type="tel"
+              placeholder="(11) 99999-9999"
+              value={formData.telefone}
+              onChange={(e) => handleChange("telefone", e.target.value)}
               className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono"
             />
           </div>

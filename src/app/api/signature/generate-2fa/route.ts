@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEvolutionCredentials } from "@/lib/config-manager";
+import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/evolution-api";
-import { CODE_2FA_LENGTH } from "@/config/constants";
-import { storeCode } from "@/lib/code-store";
+import { CODE_2FA_LENGTH, CODE_2FA_EXPIRY_SECONDS } from "@/config/constants";
 import { ApiResponse, Generate2FAPayload } from "@/types/api";
 
 function generate2FACode(): string {
@@ -20,41 +19,42 @@ export async function POST(
   try {
     const body: Generate2FAPayload = await request.json();
 
-    if (!body.leadId || !body.telefone) {
+    if (!body.phone || !body.organizationId) {
       return NextResponse.json(
-        { success: false, error: "Campos obrigatórios: leadId, telefone" },
+        { success: false, error: "Campos obrigatórios: phone, organizationId" },
         { status: 400 }
       );
     }
 
-    // Verifica se Evolution API está configurada
-    const evolutionCreds = await getEvolutionCredentials();
-    if (!evolutionCreds) {
+    // Busca o primeiro usuário da organização
+    const user = await prisma.user.findFirst({
+      where: { organizationId: body.organizationId },
+    });
+
+    if (!user) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Evolution API não configurada. Acesse /settings para configurar.",
-        },
-        { status: 400 }
+        { success: false, error: "Nenhum usuário encontrado para esta organização" },
+        { status: 404 }
       );
     }
 
-    // Gera código 2FA
+    // Gera código 2FA de 6 dígitos
     const codigo = generate2FACode();
+    const expiresAt = new Date(Date.now() + CODE_2FA_EXPIRY_SECONDS * 1000);
 
-    // Armazena em memória para validação posterior
-    storeCode(body.leadId, codigo, body.telefone);
+    // Salva o código temporariamente no registro do usuário
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        twoFactorCode: codigo,
+        twoFactorCodeExpiresAt: expiresAt,
+      },
+    });
 
-    // Envia via WhatsApp
-    const message = `🔐 *Soberior OS - Código de Verificação*\n\nSeu código para assinatura digital é:\n\n*${codigo}*\n\nEste código expira em 5 minutos.\n\nSe você não solicitou este código, ignore esta mensagem.`;
+    // Envia o código via WhatsApp
+    const message = `Seu código de acesso Soberior é: ${codigo}. Não compartilhe.`;
 
-    const whatsappResult = await sendWhatsAppMessage(
-      evolutionCreds.apiUrl,
-      evolutionCreds.apiKey,
-      body.telefone,
-      message
-    );
+    const whatsappResult = await sendWhatsAppMessage(body.phone, message);
 
     if (!whatsappResult.success) {
       console.error("Falha ao enviar WhatsApp:", whatsappResult.error);
@@ -65,11 +65,11 @@ export async function POST(
         success: true,
         message: "Código gerado e enviado via WhatsApp",
         data: {
-          expiresIn: 300, // 5 minutos em segundos
+          expiresIn: CODE_2FA_EXPIRY_SECONDS,
           ...(whatsappResult.success ? {} : { whatsappWarning: whatsappResult.error }),
         },
       },
-      { status: 201 }
+      { status: 200 }
     );
   } catch (error) {
     console.error("Erro ao gerar código 2FA:", error);

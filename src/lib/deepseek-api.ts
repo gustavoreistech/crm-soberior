@@ -1,101 +1,8 @@
-import { DEEPSEEK_API_TIMEOUT } from "@/config/constants";
-import { EnrichedLeadData } from "@/types/api";
+import OpenAI from "openai";
 
-interface DeepSeekResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: {
-    index: number;
-    message: {
-      role: string;
-      content: string;
-    };
-    finish_reason: string;
-  }[];
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
-const SYSTEM_PROMPT = `Você é um analista de marketing digital especializado em identificar dores de clientes B2B.
-Analise a URL fornecida e retorne APENAS um JSON válido (sem markdown, sem formatação) com a seguinte estrutura:
-{
-  "dor_do_cliente": "Descrição clara da principal dor do cliente identificada na URL",
-  "solucao_sugerida": "Como um CRM/automação de marketing pode resolver essa dor",
-  "nivel_urgencia": "baixo | medio | alto",
-  "metricas_estimadas": {
-    "potencial_mercado": "Estimativa de mercado endereçável",
-    "concorrentes": ["Concorrente 1", "Concorrente 2"]
-  }
-}`;
-
-/**
- * Envia uma URL para a DeepSeek API e retorna dados enriquecidos do lead.
- */
-export async function enrichLeadWithDeepSeek(
-  apiKey: string,
-  model: string,
-  url: string
-): Promise<{ success: boolean; data?: EnrichedLeadData; error?: string }> {
-  try {
-    const response = await fetch(
-      "https://api.deepseek.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: SYSTEM_PROMPT,
-            },
-            {
-              role: "user",
-              content: `Analise a seguinte URL de um potencial cliente e extraia as informações de dor e oportunidade: ${url}`,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-        }),
-        signal: AbortSignal.timeout(DEEPSEEK_API_TIMEOUT),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`DeepSeek API error ${response.status}: ${errorText}`);
-    }
-
-    const result: DeepSeekResponse = await response.json();
-    const content = result.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("Resposta vazia da DeepSeek API");
-    }
-
-    // Remove possíveis delimitadores markdown JSON
-    const cleanedContent = content
-      .replace(/```json\n?/gi, "")
-      .replace(/```\n?/g, "")
-      .trim();
-
-    const parsedData: EnrichedLeadData = JSON.parse(cleanedContent);
-
-    return { success: true, data: parsedData };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Erro desconhecido na DeepSeek";
-    console.error("Erro DeepSeek API:", errorMessage);
-    return { success: false, error: errorMessage };
-  }
+export interface LeadAnalysis {
+  score: number;
+  lostRevenue: number;
 }
 
 /**
@@ -127,5 +34,69 @@ export async function testDeepSeekConnection(
       message:
         error instanceof Error ? error.message : "Falha na conexão",
     };
+  }
+}
+
+/**
+ * Analisa o HTML de um lead usando DeepSeek via SDK OpenAI.
+ * Retorna score (0-100) e lostRevenue estimado, ou null em caso de erro.
+ */
+export async function analyzeLead(
+  htmlContent: string
+): Promise<LeadAnalysis | null> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    console.error("[deepseek] DEEPSEEK_API_KEY não configurada");
+    return null;
+  }
+
+  try {
+    const client = new OpenAI({
+      baseURL: "https://api.deepseek.com",
+      apiKey,
+    });
+
+    const response = await client.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        {
+          role: "system",
+          content: `Você é um analista de leads B2B. Analise o HTML da página do cliente e retorne APENAS um JSON válido (sem markdown) com:
+{
+  "score": number (0-100 indicando probabilidade de fechar negócio),
+  "lostRevenue": number (receita mensal estimada que o cliente pode estar perdendo sem a solução, em R$)
+}`,
+        },
+        {
+          role: "user",
+          content: `Analise o seguinte conteúdo HTML do site do lead e extraia score e lostRevenue:\n\n${htmlContent}`,
+        },
+      ],
+      temperature: 0.2,
+      max_tokens: 500,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      console.error("[deepseek] Resposta vazia da API");
+      return null;
+    }
+
+    const cleaned = content
+      .replace(/```json\n?/gi, "")
+      .replace(/```\n?/g, "")
+      .trim();
+
+    const parsed: LeadAnalysis = JSON.parse(cleaned);
+    return {
+      score: Math.min(100, Math.max(0, parsed.score)),
+      lostRevenue: parsed.lostRevenue ?? 0,
+    };
+  } catch (error) {
+    console.error(
+      "[deepseek] Erro ao analisar lead:",
+      error instanceof Error ? error.message : error
+    );
+    return null;
   }
 }

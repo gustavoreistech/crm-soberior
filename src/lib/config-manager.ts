@@ -5,14 +5,21 @@ import {
   CONFIG_DESCRIPTIONS,
   REQUIRED_CONFIG_KEYS,
 } from "@/types/config";
+import { prisma } from "./prisma";
 
 /**
- * Config Manager - Lê configurações de environment variables.
- * Futuramente pode ser migrado para uma tabela no banco via Prisma.
+ * Config Manager - Gerencia configurações via Prisma (tabela SystemConfig).
+ * As configurações são persistidas no banco PostgreSQL e também
+ * sincronizadas com process.env em runtime.
  */
 
-function getEnvValue(key: ConfigKey): string | null {
-  // Mapeia as chaves de configuração para variáveis de ambiente
+/** Cache em memória para evitar leituras repetidas do banco */
+const configCache = new Map<ConfigKey, string | null>();
+
+/**
+ * Sincroniza uma configuração do cache para process.env.
+ */
+function syncEnv(key: ConfigKey, value: string | null): void {
   const envMap: Record<ConfigKey, string> = {
     DEEPSEEK_API_KEY: "DEEPSEEK_API_KEY",
     DEEPSEEK_MODEL: "DEEPSEEK_MODEL",
@@ -22,13 +29,50 @@ function getEnvValue(key: ConfigKey): string | null {
     N8N_WEBHOOK_SECRET: "N8N_WEBHOOK_SECRET",
   };
 
-  return process.env[envMap[key]] ?? null;
+  const envKey = envMap[key];
+  if (envKey && value !== null) {
+    process.env[envKey] = value;
+  }
 }
 
 export async function getConfigValue(
   key: ConfigKey
 ): Promise<string | null> {
-  return getEnvValue(key);
+  // 1. Tenta cache em memória primeiro
+  if (configCache.has(key)) {
+    return configCache.get(key) ?? null;
+  }
+
+  // 2. Tenta process.env (fallback para variáveis de ambiente)
+  const envMap: Record<ConfigKey, string> = {
+    DEEPSEEK_API_KEY: "DEEPSEEK_API_KEY",
+    DEEPSEEK_MODEL: "DEEPSEEK_MODEL",
+    EVOLUTION_API_URL: "EVOLUTION_API_URL",
+    EVOLUTION_API_KEY: "EVOLUTION_API_KEY",
+    ASAAS_API_KEY: "ASAAS_API_KEY",
+    N8N_WEBHOOK_SECRET: "N8N_WEBHOOK_SECRET",
+  };
+
+  const envValue = process.env[envMap[key]] ?? null;
+  if (envValue) {
+    configCache.set(key, envValue);
+    return envValue;
+  }
+
+  // 3. Busca no banco via Prisma
+  try {
+    const row = await prisma.systemConfig.findUnique({
+      where: { key },
+    });
+
+    const value = row?.value ?? null;
+    configCache.set(key, value);
+    if (value) syncEnv(key, value);
+    return value;
+  } catch {
+    // Se a tabela ainda não existir, retorna null
+    return null;
+  }
 }
 
 export async function getEvolutionCredentials(): Promise<{
@@ -70,12 +114,46 @@ export async function getN8nWebhookSecret(): Promise<string | null> {
 export async function saveConfigs(
   payload: ConfigUpdatePayload
 ): Promise<void> {
-  // Nota: Como não há um modelo Config no Prisma ainda,
-  // as configurações são persistidas via .env.
-  // Futuramente, implementar persistência em banco.
+  const entries: { key: ConfigKey; value: string }[] = [];
+
+  if (payload.deepseek) {
+    entries.push(
+      { key: "DEEPSEEK_API_KEY", value: payload.deepseek.apiKey },
+      { key: "DEEPSEEK_MODEL", value: payload.deepseek.model || "deepseek-chat" }
+    );
+  }
+
+  if (payload.evolution) {
+    entries.push(
+      { key: "EVOLUTION_API_URL", value: payload.evolution.apiUrl },
+      { key: "EVOLUTION_API_KEY", value: payload.evolution.apiKey }
+    );
+  }
+
+  if (payload.asaas) {
+    entries.push({ key: "ASAAS_API_KEY", value: payload.asaas.apiKey });
+  }
+
+  if (payload.n8n) {
+    entries.push({ key: "N8N_WEBHOOK_SECRET", value: payload.n8n.webhookSecret });
+  }
+
+  // Persiste no banco via upsert
+  for (const { key, value } of entries) {
+    await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+
+    // Atualiza cache e process.env
+    configCache.set(key, value);
+    syncEnv(key, value);
+  }
+
   console.log(
-    "[config-manager] Configurações salvas via UI:",
-    Object.keys(payload)
+    "[config-manager] Configurações salvas com sucesso:",
+    entries.map((e) => e.key)
   );
 }
 

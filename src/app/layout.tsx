@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Work_Sans, Space_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/components/providers/auth-provider";
 import "./globals.css";
 
 const workSans = Work_Sans({
@@ -44,7 +45,9 @@ export default function RootLayout({
           forcedTheme="dark"
           disableTransitionOnChange
         >
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
           <Toaster
             position="top-right"
             richColors

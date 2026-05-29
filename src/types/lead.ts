@@ -40,6 +40,8 @@ export interface OrganizationSummary {
   name: string;
   cnpj: string | null;
   domain: string | null;
+  email: string | null;
+  telefone: string | null;
   stapeId: string | null;
   isActive: boolean;
 }

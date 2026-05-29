@@ -6,29 +6,41 @@ interface EvolutionSendMessageResponse {
   error?: string;
 }
 
+/** Nome padrão da instância Evolution API */
+const DEFAULT_INSTANCE = "soberior";
+
 /**
  * Envia uma mensagem de texto via Evolution API para o WhatsApp do cliente.
+ * Lê EVOLUTION_API_URL e EVOLUTION_API_KEY diretamente das variáveis de ambiente.
  */
 export async function sendWhatsAppMessage(
-  apiUrl: string,
-  apiKey: string,
-  telefone: string,
-  message: string
+  phone: string,
+  text: string
 ): Promise<EvolutionSendMessageResponse> {
+  const apiUrl = process.env.EVOLUTION_API_URL;
+  const apiKey = process.env.EVOLUTION_API_KEY;
+
+  if (!apiUrl || !apiKey) {
+    console.error("[evolution] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas");
+    return { success: false, error: "Evolution API não configurada" };
+  }
+
   try {
     // Remove caracteres não numéricos do telefone
-    const cleanPhone = telefone.replace(/\D/g, "");
+    const cleanPhone = phone.replace(/\D/g, "");
+    const instanceName = process.env.EVOLUTION_INSTANCE_NAME || DEFAULT_INSTANCE;
 
     const response = await fetch(
-      `${apiUrl}/message/sendText/${cleanPhone}`,
+      `${apiUrl}/message/sendText/${instanceName}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apiKey": apiKey,
+          "apikey": apiKey,
         },
         body: JSON.stringify({
-          text: message,
+          number: cleanPhone,
+          text,
         }),
         signal: AbortSignal.timeout(EVOLUTION_API_TIMEOUT),
       }
@@ -44,7 +56,7 @@ export async function sendWhatsAppMessage(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Erro desconhecido ao enviar WhatsApp";
-    console.error("Erro Evolution API:", errorMessage);
+    console.error("[evolution] Erro Evolution API:", errorMessage);
     return { success: false, error: errorMessage };
   }
 }

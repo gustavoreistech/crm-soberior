@@ -1,48 +1,52 @@
-import { getToken } from "next-auth/jwt"
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { withAuth } from "next-auth/middleware"
 
-export async function proxy(request: NextRequest) {
-  const token = await getToken({ req: request })
-  const pathname = request.nextUrl.pathname
+export default withAuth(
+  function proxy(req) {
+    const token = req.nextauth.token
+    const pathname = req.nextUrl.pathname
 
-  // Rotas públicas que não exigem autenticação
-  const publicRoutes = ["/login", "/api/auth"]
-  const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route))
+    // Define admin route paths (grupo de rotas (admin))
+    const adminPaths = ["/", "/leads", "/settings"]
+    const isAdminRoute = adminPaths.some(
+      (path) => pathname === path || pathname.startsWith(path + "/")
+    )
 
-  if (isPublicRoute) {
-    return NextResponse.next()
-  }
-
-  // Se não estiver logado, redireciona para /login
-  if (!token) {
-    const loginUrl = new URL("/login", request.url)
-    loginUrl.searchParams.set("callbackUrl", pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // Se for CLIENT, só pode acessar dashboard, faturas e documentos
-  if (token.role === "CLIENT") {
-    const allowedRoutes = ["/dashboard", "/faturas", "/documentos"]
-    const isAllowed = allowedRoutes.some((route) => pathname.startsWith(route))
-
-    if (!isAllowed) {
-      return NextResponse.redirect(new URL("/dashboard", request.url))
+    // Se o usuário for CLIENT e tentar acessar rotas admin, redireciona para /dashboard
+    if (token?.role === "CLIENT" && isAdminRoute) {
+      return Response.redirect(new URL("/dashboard", req.url))
     }
-  }
+  },
+  {
+    callbacks: {
+      authorized({ token, req }) {
+        const pathname = req.nextUrl.pathname
 
-  return NextResponse.next()
-}
+        // Rota de login é sempre pública
+        if (pathname.startsWith("/login")) return true
+
+        // Rotas protegidas dos grupos (admin) e (portal)
+        const protectedPaths = [
+          "/dashboard",
+          "/documentos",
+          "/faturas",
+          "/leads",
+          "/settings",
+        ]
+        const isProtected = protectedPaths.some(
+          (path) => pathname === path || pathname.startsWith(path + "/")
+        )
+
+        // A raiz (/) é a página do admin, também protegida
+        if (pathname === "/" || isProtected) {
+          return !!token
+        }
+
+        return true
+      },
+    },
+  }
+)
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (.svg, .png, .jpg, etc.)
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 }
