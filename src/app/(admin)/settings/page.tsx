@@ -73,7 +73,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex h-screen bg-[#0B1320]">
+    <div className="flex h-screen bg-zinc-950">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
@@ -86,10 +86,10 @@ export default function SettingsPage() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="p-6 rounded-lg bg-[#143D59] space-y-4">
-                  <Skeleton className="w-3/4 h-6 bg-[#0B1320]" />
-                  <Skeleton className="w-full h-10 bg-[#0B1320]" />
-                  <Skeleton className="w-full h-10 bg-[#0B1320]" />
+                <div key={i} className="p-6 rounded-lg bg-zinc-900 space-y-4">
+                  <Skeleton className="w-3/4 h-6 bg-zinc-950" />
+                  <Skeleton className="w-full h-10 bg-zinc-950" />
+                  <Skeleton className="w-full h-10 bg-zinc-950" />
                 </div>
               ))}
             </div>
@@ -121,8 +121,8 @@ export default function SettingsPage() {
 
           {/* Config Summary */}
           {configStatus && (
-            <div className="mt-8 p-4 rounded-lg bg-[#143D59] border border-[#1E293B]">
-              <p className="text-sm text-[#94A3B8]">
+            <div className="mt-8 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+              <p className="text-sm text-zinc-400">
                 Status do sistema:{" "}
                 <span
                   className={`font-mono font-bold ${
@@ -136,7 +136,7 @@ export default function SettingsPage() {
                     : "Configuração pendente"}
                 </span>
               </p>
-              <p className="text-xs text-[#64748B] mt-1">
+              <p className="text-xs text-zinc-500 mt-1">
                 {configStatus.configured
                   ? "Todas as integrações estão prontas para uso."
                   : "Configure todos os serviços acima para ativar as funcionalidades completas do sistema."}

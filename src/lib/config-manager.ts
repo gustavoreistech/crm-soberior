@@ -27,6 +27,8 @@ function syncEnv(key: ConfigKey, value: string | null): void {
     EVOLUTION_API_KEY: "EVOLUTION_API_KEY",
     ASAAS_API_KEY: "ASAAS_API_KEY",
     N8N_WEBHOOK_SECRET: "N8N_WEBHOOK_SECRET",
+    N8N_PROPOSAL_WEBHOOK_URL: "N8N_PROPOSAL_WEBHOOK_URL",
+    N8N_KILLSWITCH_WEBHOOK_URL: "N8N_KILLSWITCH_WEBHOOK_URL",
   };
 
   const envKey = envMap[key];
@@ -51,6 +53,8 @@ export async function getConfigValue(
     EVOLUTION_API_KEY: "EVOLUTION_API_KEY",
     ASAAS_API_KEY: "ASAAS_API_KEY",
     N8N_WEBHOOK_SECRET: "N8N_WEBHOOK_SECRET",
+    N8N_PROPOSAL_WEBHOOK_URL: "N8N_PROPOSAL_WEBHOOK_URL",
+    N8N_KILLSWITCH_WEBHOOK_URL: "N8N_KILLSWITCH_WEBHOOK_URL",
   };
 
   const envValue = process.env[envMap[key]] ?? null;
@@ -111,6 +115,14 @@ export async function getN8nWebhookSecret(): Promise<string | null> {
   return getConfigValue("N8N_WEBHOOK_SECRET");
 }
 
+export async function getN8nProposalWebhookUrl(): Promise<string | null> {
+  return getConfigValue("N8N_PROPOSAL_WEBHOOK_URL");
+}
+
+export async function getN8nKillswitchWebhookUrl(): Promise<string | null> {
+  return getConfigValue("N8N_KILLSWITCH_WEBHOOK_URL");
+}
+
 export async function saveConfigs(
   payload: ConfigUpdatePayload
 ): Promise<void> {
@@ -136,6 +148,12 @@ export async function saveConfigs(
 
   if (payload.n8n) {
     entries.push({ key: "N8N_WEBHOOK_SECRET", value: payload.n8n.webhookSecret });
+    if (payload.n8n.proposalWebhookUrl) {
+      entries.push({ key: "N8N_PROPOSAL_WEBHOOK_URL", value: payload.n8n.proposalWebhookUrl });
+    }
+    if (payload.n8n.killswitchWebhookUrl) {
+      entries.push({ key: "N8N_KILLSWITCH_WEBHOOK_URL", value: payload.n8n.killswitchWebhookUrl });
+    }
   }
 
   // Persiste no banco via upsert
@@ -172,6 +190,7 @@ export async function checkConfigStatus(): Promise<ConfigStatusResponse> {
   const evolutionKey = results.find((r) => r.key === "EVOLUTION_API_KEY")?.value;
   const asaasVal = results.find((r) => r.key === "ASAAS_API_KEY")?.value;
   const n8nVal = results.find((r) => r.key === "N8N_WEBHOOK_SECRET")?.value;
+  const n8nProposalUrl = results.find((r) => r.key === "N8N_PROPOSAL_WEBHOOK_URL")?.value;
 
   return {
     configured: keys.every((k) => results.find((r) => r.key === k)?.value),
@@ -193,6 +212,7 @@ export async function checkConfigStatus(): Promise<ConfigStatusResponse> {
       n8n: {
         configured: !!n8nVal,
         key_preview: n8nVal ? `${n8nVal.slice(0, 8)}...` : null,
+        url_preview: n8nProposalUrl || null,
       },
     },
   };

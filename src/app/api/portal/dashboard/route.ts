@@ -24,7 +24,7 @@ export async function GET(
       }),
       prisma.subscription.findFirst({
         where: { organizationId },
-        orderBy: { dueDate: "desc" },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -37,12 +37,12 @@ export async function GET(
       success: true,
       data: {
         organizationName: organization?.name ?? "—",
-        projectStage: project?.stage ?? null,
+        projectStatus: project?.status ?? null,
         uptimeStatus: project?.uptimeStatus ?? null,
-        subscriptionPlan: subscription?.planType ?? null,
+        subscriptionPlan: subscription?.planName ?? null,
         subscriptionStatus: subscription?.status ?? null,
-        mrrValue: subscription?.mrrValue ?? null,
-        dueDate: subscription?.dueDate?.toISOString() ?? null,
+        mrrValue: subscription?.value ?? null,
+        dueDate: null,
       },
     });
   } catch (error) {

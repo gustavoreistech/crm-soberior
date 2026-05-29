@@ -6,20 +6,43 @@ interface TriggerOnboardingBody {
   organizationId: string;
 }
 
-interface N8nPayload {
-  action: "GENERATE_DOCS";
+interface N8nOnboardingPayload {
+  action: "START_ONBOARDING";
+  organizationId: string;
   organizationName: string;
   domain: string | null;
+  email: string | null;
+  telefone: string | null;
   stapeId: string | null;
+  techContact: string | null;
+  projectId: string;
+  milestones: Array<{
+    id: string;
+    title: string;
+    order: number;
+  }>;
 }
+
+/**
+ * Milestones padrão da esteira de onboarding técnico.
+ * Cada etapa será executada pelo n8n e notificada de volta via webhook.
+ */
+const DEFAULT_ONBOARDING_MILESTONES = [
+  { title: "Auditoria Técnica Inicial", order: 1 },
+  { title: "Provisionamento Stape", order: 2 },
+  { title: "Setup ClickHouse", order: 3 },
+  { title: "Configuração GTM Server-Side", order: 4 },
+  { title: "Dashboard Looker Studio", order: 5 },
+  { title: "Go-Live & Homologação", order: 6 },
+];
 
 /**
  * POST /api/projects/trigger-onboarding
  *
- * Dispara a esteira de produção de documentos no n8n.
- * Recebe o `organizationId`, busca os dados completos da Organização
- * (incluindo Leads e Subscriptions) no Prisma, envia um webhook para
- * o n8n e cria um registro de Project com stage "ONBOARDING".
+ * Dispara a esteira de onboarding técnico automatizado.
+ * 1. Cria/garante um Project no Prisma com status ONBOARDING
+ * 2. Instancia os milestones padrão vinculados ao projeto
+ * 3. Dispara webhook para o n8n com dados completos da organização
  */
 export async function POST(
   request: NextRequest
@@ -34,12 +57,21 @@ export async function POST(
       );
     }
 
-    // 1. Busca a Organization com Leads e Subscriptions
+    // 1. Busca a Organização com dados completos
     const organization = await prisma.organization.findUnique({
       where: { id: body.organizationId },
-      include: {
-        leads: true,
-        subscriptions: true,
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        email: true,
+        telefone: true,
+        stapeId: true,
+        techContact: true,
+        users: {
+          select: { id: true },
+          take: 1,
+        },
       },
     });
 
@@ -51,28 +83,97 @@ export async function POST(
     }
 
     console.info(
-      `[trigger-onboarding] Disparando onboarding para org=${organization.id} (${organization.name})`
+      `[trigger-onboarding] Iniciando onboarding para org=${organization.id} (${organization.name})`
     );
 
-    // 2. Monta o payload e envia para o n8n
+    // 2. Cria o Project com milestones em uma transação
+    const result = await prisma.$transaction(async (tx) => {
+      // Upsert: se já existir projeto, usa ele; senão cria
+      let project = await tx.project.findFirst({
+        where: { organizationId: organization.id },
+      });
+
+      if (!project) {
+        project = await tx.project.create({
+          data: {
+            organizationId: organization.id,
+            status: "ONBOARDING",
+            startDate: new Date(),
+          },
+        });
+        console.info(
+          `[trigger-onboarding] Project criado (id=${project.id}) para org=${organization.id}`
+        );
+      } else {
+        console.info(
+          `[trigger-onboarding] Project já existe (id=${project.id}) — recriando milestones`
+        );
+        // Se o projeto já existe, apaga milestones antigas para recriar
+        await tx.milestone.deleteMany({
+          where: { projectId: project.id },
+        });
+      }
+
+      // Cria os milestones padrão de onboarding
+      const milestones = await Promise.all(
+        DEFAULT_ONBOARDING_MILESTONES.map((m) =>
+          tx.milestone.create({
+            data: {
+              projectId: project!.id,
+              title: m.title,
+              order: m.order,
+              status: "PENDING",
+            },
+          })
+        )
+      );
+
+      console.info(
+        `[trigger-onboarding] ${milestones.length} milestones criadas para project=${project!.id}`
+      );
+
+      return { project, milestones };
+    });
+
+    // 3. Dispara webhook para o n8n
     const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
 
     if (!n8nWebhookUrl) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Variável de ambiente N8N_WEBHOOK_URL não configurada. Configure-a nas configurações do sistema.",
-        },
-        { status: 500 }
+      console.warn(
+        "[trigger-onboarding] N8N_WEBHOOK_URL não configurada — projeto criado mas automação não disparada"
       );
+      return NextResponse.json({
+        success: true,
+        data: {
+          projectId: result.project.id,
+          milestones: result.milestones.map((m) => ({
+            id: m.id,
+            title: m.title,
+            order: m.order,
+          })),
+          warning:
+            "Projeto criado sem automação n8n. Configure N8N_WEBHOOK_URL para ativar a esteira.",
+        },
+        message:
+          "Onboarding registrado. Automação n8n não disponível.",
+      });
     }
 
-    const n8nPayload: N8nPayload = {
-      action: "GENERATE_DOCS",
+    const n8nPayload: N8nOnboardingPayload = {
+      action: "START_ONBOARDING",
+      organizationId: organization.id,
       organizationName: organization.name,
       domain: organization.domain,
+      email: organization.email,
+      telefone: organization.telefone,
       stapeId: organization.stapeId,
+      techContact: organization.techContact,
+      projectId: result.project.id,
+      milestones: result.milestones.map((m) => ({
+        id: m.id,
+        title: m.title,
+        order: m.order,
+      })),
     };
 
     const n8nResponse = await fetch(n8nWebhookUrl, {
@@ -90,6 +191,14 @@ export async function POST(
         {
           success: false,
           error: `Falha ao comunicar com n8n (HTTP ${n8nResponse.status})`,
+          data: {
+            projectId: result.project.id,
+            milestones: result.milestones.map((m) => ({
+              id: m.id,
+              title: m.title,
+              order: m.order,
+            })),
+          },
         },
         { status: 502 }
       );
@@ -99,36 +208,22 @@ export async function POST(
       `[trigger-onboarding] Webhook n8n enviado com sucesso para org=${organization.id}`
     );
 
-    // 3. Cria um Project com stage "ONBOARDING" se ainda não existir
-    const existingProject = await prisma.project.findFirst({
-      where: { organizationId: organization.id },
-    });
-
-    if (!existingProject) {
-      await prisma.project.create({
-        data: {
-          organizationId: organization.id,
-          stage: "ONBOARDING",
-        },
-      });
-
-      console.info(
-        `[trigger-onboarding] Project criado para org=${organization.id}`
-      );
-    } else {
-      console.info(
-        `[trigger-onboarding] Project já existe (id=${existingProject.id}) para org=${organization.id} — nenhuma ação necessária`
-      );
-    }
-
     // 4. Retorna sucesso
     return NextResponse.json({
       success: true,
       data: {
+        projectId: result.project.id,
         organizationId: organization.id,
         organizationName: organization.name,
+        milestones: result.milestones.map((m) => ({
+          id: m.id,
+          title: m.title,
+          order: m.order,
+          status: m.status,
+        })),
       },
-      message: "Solicitação de onboarding enviada para a fila do n8n",
+      message:
+        "Onboarding técnico iniciado com sucesso. A automação n8n está processando os milestones.",
     });
   } catch (error) {
     console.error("[trigger-onboarding] Erro ao disparar onboarding:", error);

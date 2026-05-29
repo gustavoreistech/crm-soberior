@@ -58,42 +58,47 @@
   --color-fechado: #22C55E;
   --color-onboarding: #3B82F6;
   --color-inadimplente: #EF4444;
+
+  /* Tokens metálicos */
+  --color-metallic: #d4d4d8;
+  --color-metallic-muted: #a1a1aa;
+  --color-metallic-border: #3f3f46;
 }
 
-/* Tema Soberior - Dark Mode Corporativo */
+/* Tema Soberior - Dark Mode Metálico */
 :root {
-  --background: #0B1320;
-  --foreground: #FFFFFF;
-  --card: #143D59;
-  --card-foreground: #FFFFFF;
-  --popover: #143D59;
-  --popover-foreground: #FFFFFF;
+  --background: #09090b;
+  --foreground: #FAFAFA;
+  --card: #18181b;
+  --card-foreground: #FAFAFA;
+  --popover: #18181b;
+  --popover-foreground: #FAFAFA;
   --primary: #F2C14E;
-  --primary-foreground: #0B1320;
+  --primary-foreground: #09090b;
   --secondary: #1F7A8C;
-  --secondary-foreground: #FFFFFF;
-  --muted: #1E293B;
-  --muted-foreground: #94A3B8;
+  --secondary-foreground: #FAFAFA;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
   --accent: #F2C14E;
-  --accent-foreground: #0B1320;
+  --accent-foreground: #09090b;
   --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --border: #1E293B;
-  --input: #1E293B;
+  --destructive-foreground: #FAFAFA;
+  --border: #27272a;
+  --input: #27272a;
   --ring: #F2C14E;
   --radius: 0.625rem;
   --chart-1: #F2C14E;
   --chart-2: #1F7A8C;
-  --chart-3: #143D59;
+  --chart-3: #18181b;
   --chart-4: #22C55E;
   --chart-5: #EF4444;
-  --sidebar: #0B1320;
-  --sidebar-foreground: #94A3B8;
+  --sidebar: #09090b;
+  --sidebar-foreground: #a1a1aa;
   --sidebar-primary: #F2C14E;
-  --sidebar-primary-foreground: #0B1320;
-  --sidebar-accent: #143D59;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #1E293B;
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #FAFAFA;
+  --sidebar-border: #27272a;
   --sidebar-ring: #F2C14E;
 }
 
@@ -132,11 +137,11 @@ html {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #1E293B;
+    background: #27272a;
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    background: #3f3f46;
   }
 }

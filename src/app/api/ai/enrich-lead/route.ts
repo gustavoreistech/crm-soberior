@@ -74,6 +74,13 @@ export async function POST(
       );
     }
 
+    if (!lead.organization) {
+      return NextResponse.json(
+        { success: false, error: "Lead não possui organização vinculada" },
+        { status: 400 }
+      );
+    }
+
     // 2. Simula o scraping — gera HTML básico baseado no domínio da Organization
     const simulatedHtml = simulateScrapedHtml(
       lead.organization.name,
@@ -113,6 +120,13 @@ export async function POST(
     );
 
     // 5. Retorna os dados atualizados
+    if (!updatedLead.organization) {
+      return NextResponse.json(
+        { success: false, error: "Organização não encontrada após atualização" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {

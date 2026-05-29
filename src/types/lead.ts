@@ -46,14 +46,33 @@ export interface OrganizationSummary {
   isActive: boolean;
 }
 
+/** Resumo de uma Proposta vinculada ao Lead */
+export interface ProposalSummary {
+  id: string;
+  value: number | null;
+  pdfUrl: string | null;
+  status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED";
+}
+
+/** Resumo de um Contrato vinculado ao Lead */
+export interface ContractSummary {
+  id: string;
+  proposalId: string;
+  signatureStatus: "PENDING" | "SIGNED";
+  signedAt: string | null;
+}
+
 /** Lead conforme retornado pela API (baseado nos tipos gerados pelo Prisma Client) */
 export interface Lead {
   id: string;
-  organizationId: string;
+  organizationId: string | null;
   status: StatusFunil;
   score: number | null;
   lostRevenue: number | null;
+  converted: boolean;
   organization: OrganizationSummary;
+  proposal?: ProposalSummary | null;
+  contract?: ContractSummary | null;
 }
 
 /** Payload para criar um Lead via API */

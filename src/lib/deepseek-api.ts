@@ -6,6 +6,15 @@ export interface LeadAnalysis {
 }
 
 /**
+ * Opções para o chat do Soberior Copilot.
+ */
+export interface CopilotChatOptions {
+  systemPrompt: string;
+  message: string;
+  signal?: AbortSignal;
+}
+
+/**
  * Testa a conexão com a DeepSeek API.
  */
 export async function testDeepSeekConnection(
@@ -99,4 +108,52 @@ export async function analyzeLead(
     );
     return null;
   }
+}
+
+/**
+ * Envia uma mensagem para o DeepSeek com System Prompt e retorna um
+ * ReadableStream para consumo via SSE no frontend.
+ *
+ * Usa fetch diretamente com streaming em vez do SDK OpenAI para
+ * termos controle total sobre o stream de tokens.
+ */
+export async function copilotChat(
+  options: CopilotChatOptions
+): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error("DEEPSEEK_API_KEY não configurada");
+  }
+
+  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: options.systemPrompt },
+        { role: "user", content: options.message },
+      ],
+      temperature: 0.3,
+      max_tokens: 2048,
+      stream: true,
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Erro desconhecido");
+    throw new Error(
+      `DeepSeek API respondeu com status ${response.status}: ${errorText}`
+    );
+  }
+
+  if (!response.body) {
+    throw new Error("DeepSeek API não retornou body para streaming");
+  }
+
+  return response.body;
 }

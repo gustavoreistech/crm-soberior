@@ -18,7 +18,9 @@ export type ConfigKey =
   | "EVOLUTION_API_URL"
   | "EVOLUTION_API_KEY"
   | "ASAAS_API_KEY"
-  | "N8N_WEBHOOK_SECRET";
+  | "N8N_WEBHOOK_SECRET"
+  | "N8N_PROPOSAL_WEBHOOK_URL"
+  | "N8N_KILLSWITCH_WEBHOOK_URL";
 
 export const REQUIRED_CONFIG_KEYS: ConfigKey[] = [
   "DEEPSEEK_API_KEY",
@@ -27,6 +29,7 @@ export const REQUIRED_CONFIG_KEYS: ConfigKey[] = [
   "EVOLUTION_API_KEY",
   "ASAAS_API_KEY",
   "N8N_WEBHOOK_SECRET",
+  "N8N_PROPOSAL_WEBHOOK_URL",
 ];
 
 export const CONFIG_DESCRIPTIONS: Record<ConfigKey, string> = {
@@ -36,6 +39,8 @@ export const CONFIG_DESCRIPTIONS: Record<ConfigKey, string> = {
   EVOLUTION_API_KEY: "API Key da Evolution API",
   ASAAS_API_KEY: "API Key do Asaas",
   N8N_WEBHOOK_SECRET: "Secret para validar webhooks do n8n",
+  N8N_PROPOSAL_WEBHOOK_URL: "URL do webhook do n8n para geração de propostas",
+  N8N_KILLSWITCH_WEBHOOK_URL: "URL do webhook do n8n para Kill Switch (inadimplência)",
 };
 
 export interface ServiceConfigStatus {
@@ -68,5 +73,7 @@ export interface ConfigUpdatePayload {
   };
   n8n?: {
     webhookSecret: string;
+    proposalWebhookUrl?: string;
+    killswitchWebhookUrl?: string;
   };
 }

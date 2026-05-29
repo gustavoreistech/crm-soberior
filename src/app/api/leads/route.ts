@@ -12,23 +12,25 @@ export async function GET(): Promise<NextResponse<ApiResponse>> {
       orderBy: { id: "asc" },
     });
 
-    const mapped = leads.map((lead) => ({
-      id: lead.id,
-      organizationId: lead.organizationId,
-      status: STATUS_MAP[lead.status] ?? lead.status,
-      score: lead.score,
-      lostRevenue: lead.lostRevenue,
-      organization: {
-        id: lead.organization.id,
-        name: lead.organization.name,
-        cnpj: lead.organization.cnpj,
-        domain: lead.organization.domain,
-        email: lead.organization.email,
-        telefone: lead.organization.telefone,
-        stapeId: lead.organization.stapeId,
-        isActive: lead.organization.isActive,
-      },
-    }));
+    const mapped = leads
+      .filter((lead): lead is typeof lead & { organization: NonNullable<typeof lead.organization> } => lead.organization !== null)
+      .map((lead) => ({
+        id: lead.id,
+        organizationId: lead.organizationId,
+        status: STATUS_MAP[lead.status] ?? lead.status,
+        score: lead.score,
+        lostRevenue: lead.lostRevenue,
+        organization: {
+          id: lead.organization.id,
+          name: lead.organization.name,
+          cnpj: lead.organization.cnpj,
+          domain: lead.organization.domain,
+          email: lead.organization.email,
+          telefone: lead.organization.telefone,
+          stapeId: lead.organization.stapeId,
+          isActive: lead.organization.isActive,
+        },
+      }));
 
     return NextResponse.json({ success: true, data: mapped });
   } catch (error) {
@@ -85,6 +87,13 @@ export async function POST(
 
       return lead;
     });
+
+    if (!result.organization) {
+      return NextResponse.json(
+        { success: false, error: "Erro ao criar lead: organização não encontrada" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {

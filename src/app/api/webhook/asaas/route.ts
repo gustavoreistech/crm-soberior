@@ -1,25 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  getN8nKillswitchWebhookUrl,
+} from "@/lib/config-manager";
 import { ApiResponse, AsaasWebhookPayload } from "@/types/api";
+import { InvoiceStatus, SubscriptionStatus } from "@/generated/prisma/enums";
+
+// ──────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────
 
 /**
- * Calcula a diferença em dias úteis entre duas datas.
- * Considera apenas dias de semana (segunda a sexta) como úteis.
+ * Dispara um webhook para o n8n informando sobre o status de pagamento.
+ * Usado tanto para Kill Switch (inadimplência) quanto para reativação.
  */
-function businessDaysBetween(start: Date, end: Date): number {
-  let count = 0;
-  const current = new Date(start);
+async function notifyN8n(
+  event: "KILL_SWITCH_TRIGGERED" | "SERVICE_REACTIVATED",
+  organizationId: string,
+  domain: string | null,
+  payload: {
+    invoiceId: string;
+    subscriptionId: string;
+    value: number;
+    dueDate: string;
+  }
+): Promise<void> {
+  const killswitchUrl = await getN8nKillswitchWebhookUrl();
+  const webhookUrl =
+    killswitchUrl ?? process.env.N8N_KILLSWITCH_WEBHOOK_URL;
 
-  while (current < end) {
-    const dayOfWeek = current.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      count++;
-    }
-    current.setDate(current.getDate() + 1);
+  if (!webhookUrl) {
+    console.warn(
+      "[asaas-webhook] N8N_KILLSWITCH_WEBHOOK_URL não configurada — skipping n8n notification"
+    );
+    return;
   }
 
-  return count;
+  // Fire-and-forget: não bloqueia o retorno do webhook
+  fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event,
+      organizationId,
+      domain,
+      ...payload,
+      timestamp: new Date().toISOString(),
+    }),
+  }).catch((err) =>
+    console.error("[asaas-webhook] Erro ao notificar n8n:", err)
+  );
 }
+
+// ──────────────────────────────────────────
+// POST /api/webhook/asaas
+// ──────────────────────────────────────────
 
 export async function POST(
   request: NextRequest
@@ -34,115 +69,144 @@ export async function POST(
       );
     }
 
-    // ──────────────────────────────────────────────
-    // Kill Switch: processa apenas PAYMENT_OVERDUE
-    // ──────────────────────────────────────────────
-    if (body.event !== "PAYMENT_OVERDUE") {
-      return NextResponse.json({
-        success: true,
-        message: `Evento ${body.event} ignorado pelo Kill Switch`,
-      });
-    }
+    const { event, payment } = body;
 
-    // Busca a Subscription pelo asaasId
-    // O asaasId pode vir no payload como:
-    //   - payment.customer (ID do cliente no Asaas)
-    //   - payment.metadata (chave definida na integração)
-    //   - subscription.id (ID da assinatura no Asaas)
-    const asaasId =
-      body.payment.customer ??
-      body.payment.metadata?.asaasSubscriptionId ??
-      body.subscription?.id;
-
-    if (!asaasId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "asaasId não encontrado no payload — nenhum dos campos " +
-            "(payment.customer, payment.metadata.asaasSubscriptionId, subscription.id) está presente",
+    // ──────────────────────────────────────────
+    // 1. Localiza a Invoice pelo asaasId (payment.id)
+    // ──────────────────────────────────────────
+    const invoice = await prisma.invoice.findUnique({
+      where: { asaasId: payment.id },
+      include: {
+        subscription: {
+          include: { organization: true },
         },
-        { status: 400 }
-      );
-    }
-
-    const subscription = await prisma.subscription.findUnique({
-      where: { asaasId },
-      include: { organization: true },
-    });
-
-    if (!subscription) {
-      return NextResponse.json({
-        success: true,
-        message: `Nenhuma Subscription encontrada para asaasId "${asaasId}"`,
-      });
-    }
-
-    // ──────────────────────────────────────────────
-    // Verifica se já passaram mais de 5 dias úteis
-    // desde a data de vencimento
-    // ──────────────────────────────────────────────
-    const today = new Date();
-    const dueDate = new Date(body.payment.dueDate);
-    const businessDaysOverdue = businessDaysBetween(dueDate, today);
-
-    if (businessDaysOverdue <= 5) {
-      return NextResponse.json({
-        success: true,
-        message: `Apenas ${businessDaysOverdue} dias úteis de atraso. Limiar de 5 não atingido.`,
-        data: { businessDaysOverdue, threshold: 5 },
-      });
-    }
-
-    // ──────────────────────────────────────────────
-    // KILL SWITCH — aciona o bloqueio
-    // ──────────────────────────────────────────────
-
-    // 1. Desativa a Organization
-    await prisma.organization.update({
-      where: { id: subscription.organizationId },
-      data: { isActive: false },
-    });
-
-    // 2. Atualiza a Subscription para OVERDUE
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { status: "OVERDUE" },
-    });
-
-    // 3. Dispara POST para o webhook do n8n com o stapeId
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL_KILLSWITCH;
-    const stapeId = subscription.organization.stapeId;
-
-    if (n8nWebhookUrl && stapeId) {
-      // Fire-and-forget: não bloqueia o retorno do webhook
-      fetch(n8nWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stapeId,
-          organizationId: subscription.organizationId,
-          event: "KILL_SWITCH_TRIGGERED",
-          reason: `Pagamento vencido há ${businessDaysOverdue} dias úteis`,
-          subscriptionId: subscription.id,
-        }),
-      }).catch((err) =>
-        console.error("Erro ao notificar n8n Kill Switch:", err)
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Kill Switch acionado para organização ${subscription.organizationId}`,
-      data: {
-        event: body.event,
-        organizationId: subscription.organizationId,
-        businessDaysOverdue,
-        stapeId,
+        organization: true,
       },
     });
+
+    if (!invoice) {
+      return NextResponse.json({
+        success: true,
+        message: `Nenhuma Invoice encontrada para asaasId "${payment.id}" — evento ignorado`,
+      });
+    }
+
+    const organization = invoice.organization;
+    const subscription = invoice.subscription;
+
+    // ──────────────────────────────────────────
+    // 2. Processa conforme o evento
+    // ──────────────────────────────────────────
+
+    if (event === "PAYMENT_RECEIVED") {
+      // ─── Pagamento recebido ───
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: InvoiceStatus.PAID },
+      });
+
+      // Reativa a subscription se estava PAST_DUE
+      if (subscription && subscription.status === SubscriptionStatus.PAST_DUE) {
+        await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: { status: SubscriptionStatus.ACTIVE },
+        });
+      }
+
+      // Reativa a organização se estava inativa
+      if (!organization.isActive) {
+        await prisma.organization.update({
+          where: { id: organization.id },
+          data: { isActive: true },
+        });
+      }
+
+      // Notifica o n8n para reativar os serviços (Stape)
+      await notifyN8n(
+        "SERVICE_REACTIVATED",
+        organization.id,
+        organization.domain,
+        {
+          invoiceId: invoice.id,
+          subscriptionId: subscription?.id ?? "N/A",
+          value: invoice.value,
+          dueDate: invoice.dueDate.toISOString(),
+        }
+      );
+
+      console.info(
+        `[asaas-webhook] PAYMENT_RECEIVED — Invoice=${invoice.id} marcada como PAIDA, organização=${organization.id} reativada`
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Pagamento recebido — fatura ${invoice.id} atualizada para PAID`,
+        data: {
+          event,
+          organizationId: organization.id,
+          invoiceId: invoice.id,
+          action: "REACTIVATED",
+        },
+      });
+    }
+
+    if (event === "PAYMENT_OVERDUE") {
+      // ─── Pagamento vencido ───
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: InvoiceStatus.OVERDUE },
+      });
+
+      // Atualiza a subscription para PAST_DUE
+      if (subscription) {
+        await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: { status: SubscriptionStatus.PAST_DUE },
+        });
+      }
+
+      // Desativa a organização (Kill Switch)
+      await prisma.organization.update({
+        where: { id: organization.id },
+        data: { isActive: false },
+      });
+
+      // Notifica o n8n para pausar os contentores (Stape)
+      await notifyN8n(
+        "KILL_SWITCH_TRIGGERED",
+        organization.id,
+        organization.domain,
+        {
+          invoiceId: invoice.id,
+          subscriptionId: subscription?.id ?? "N/A",
+          value: invoice.value,
+          dueDate: invoice.dueDate.toISOString(),
+        }
+      );
+
+      console.info(
+        `[asaas-webhook] PAYMENT_OVERDUE — Invoice=${invoice.id} marcada como OVERDUE, Kill Switch acionado para organização=${organization.id}`
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Kill Switch acionado para organização ${organization.id}`,
+        data: {
+          event,
+          organizationId: organization.id,
+          invoiceId: invoice.id,
+          action: "KILL_SWITCH_TRIGGERED",
+        },
+      });
+    }
+
+    // Evento desconhecido — ignorar
+    return NextResponse.json({
+      success: true,
+      message: `Evento ${event} ignorado — nenhuma ação necessária`,
+    });
   } catch (error) {
-    console.error("Erro no webhook Asaas (Kill Switch):", error);
+    console.error("[asaas-webhook] Erro ao processar webhook:", error);
     return NextResponse.json(
       {
         success: false,

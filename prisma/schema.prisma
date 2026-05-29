@@ -8,18 +8,25 @@ generator client {
 }
 
 model Organization {
-  id            String   @id @default(uuid())
-  name          String
-  cnpj          String?  @unique
-  domain        String?
-  email         String?
-  telefone      String?
-  stapeId       String?
-  isActive      Boolean  @default(true)
-  users         User[]
-  leads         Lead[]
-  projects      Project[]
-  subscriptions Subscription[]
+  id              String   @id @default(uuid())
+  name            String
+  cnpj            String?  @unique
+  domain          String?
+  email           String?
+  telefone        String?
+  stapeId         String?
+  isActive        Boolean  @default(true)
+  techContact     String?
+  financeContact  String?
+
+  users           User[]
+  leads           Lead[]
+  proposals       Proposal[]
+  contracts       Contract[]
+  projects        Project[]
+  subscriptions   Subscription[]
+  invoices        Invoice[]
+  tickets         Ticket[]
 }
 
 model User {
@@ -31,35 +38,108 @@ model User {
   organization          Organization? @relation(fields: [organizationId], references: [id])
   twoFactorCode         String?
   twoFactorCodeExpiresAt DateTime?
+
+  tickets         Ticket[]   @relation("TicketCreator")
+  assignedTickets Ticket[]   @relation("TicketAssignment")
+  messages        Message[]
 }
 
 model Lead {
+  id             String        @id @default(uuid())
+  organizationId String?       @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  status         String        @default("PROSPECT")
+  score          Int?
+  lostRevenue    Float?
+  converted      Boolean       @default(false)
+
+  proposal       Proposal?
+}
+
+model Proposal {
   id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  status         String       @default("PROSPECT")
-  score          Int?
-  lostRevenue    Float?
+  leadId         String?      @unique
+  lead           Lead?        @relation(fields: [leadId], references: [id])
+  value          Float?
+  pdfUrl         String?
+  status         String       @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  contract       Contract?
+
+  @@index([organizationId])
+}
+
+model Contract {
+  id              String       @id @default(uuid())
+  proposalId      String       @unique
+  proposal        Proposal     @relation(fields: [proposalId], references: [id])
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  signatureStatus String       @default("PENDING") // PENDING | SIGNED
+  signedAt        DateTime?
+  twoFactorToken  String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+enum ProjectStatus {
+  ONBOARDING
+  ACTIVE
+  CHURN
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
 }
 
 model Project {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  stage          String       @default("ONBOARDING")
-  uptimeStatus   Float        @default(100.0)
+  id             String        @id @default(uuid())
+  organizationId String        @unique
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  status         ProjectStatus @default(ONBOARDING)
+  startDate      DateTime?
+  endDate        DateTime?
+  uptimeStatus   Float         @default(100.0)
   lastQBR        DateTime?
+
+  milestones    Milestone[]
+  tasks         Task[]
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
 }
 
 model Subscription {
-  id             String       @id @default(uuid())
+  id             String             @id @default(uuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  asaasId        String       @unique
-  planType       String
-  mrrValue       Float
-  status         String
-  dueDate        DateTime
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  asaasId        String             @unique
+  planName       String
+  value          Float
+  status         SubscriptionStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  invoices Invoice[]
+
+  @@index([organizationId])
 }
 
 model SystemConfig {
@@ -67,4 +147,106 @@ model SystemConfig {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// GESTÃO DE PROJETOS
+// ============================================================
+
+model Milestone {
+  id          String          @id @default(uuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      MilestoneStatus @default(PENDING)
+  order       Int             @default(0)
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tasks Task[]
+
+  @@index([projectId])
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId String
+  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  isCompleted Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([milestoneId])
+}
+
+// ============================================================
+// ERP / FATURAMENTO
+// ============================================================
+
+model Invoice {
+  id             String        @id @default(uuid())
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asaasId        String        @unique
+  dueDate        DateTime
+  value          Float
+  status         InvoiceStatus @default(PENDING)
+  invoiceUrl     String
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+}
+
+// ============================================================
+// HELPDESK OMNICHANNEL
+// ============================================================
+
+model Ticket {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(name: "TicketCreator", fields: [userId], references: [id], onDelete: SetNull)
+  subject        String
+  description    String?
+  status         String   @default("OPEN") // OPEN | IN_PROGRESS | WAITING_CUSTOMER | RESOLVED | CLOSED
+  priority       String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  source         String   @default("PORTAL") // PORTAL | WHATSAPP
+  assignedToId   String?
+  assignedTo     User?    @relation(name: "TicketAssignment", fields: [assignedToId], references: [id], onDelete: SetNull)
+  closedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  messages       Message[]
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@index([source])
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  content     String
+  source      String   @default("PORTAL") // PORTAL | WHATSAPP
+  isFromStaff Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
 }

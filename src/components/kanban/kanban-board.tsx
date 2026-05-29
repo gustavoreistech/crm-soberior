@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   DndContext,
   DragEndEvent,
@@ -125,10 +126,10 @@ export function KanbanBoard() {
       <div className="flex gap-4 overflow-x-auto pb-4">
         {CANVAS_ORDER.map((status) => (
           <div key={status} className="flex-shrink-0 w-72">
-            <div className="p-4 rounded-xl bg-[#143D59] space-y-3">
-              <Skeleton className="h-6 w-32 bg-[#0B1320]" />
-              <Skeleton className="h-24 w-full bg-[#0B1320]" />
-              <Skeleton className="h-24 w-full bg-[#0B1320]" />
+            <div className="p-4 rounded-xl bg-zinc-900 space-y-3">
+              <Skeleton className="h-6 w-32 bg-zinc-950" />
+              <Skeleton className="h-24 w-full bg-zinc-950" />
+              <Skeleton className="h-24 w-full bg-zinc-950" />
             </div>
           </div>
         ))}
@@ -146,12 +147,17 @@ export function KanbanBoard() {
       >
         <div className="flex gap-4 overflow-x-auto pb-4">
           {CANVAS_ORDER.map((status) => (
-            <KanbanColumn
+            <motion.div
               key={status}
-              status={status}
-              leads={getColumnLeads(status)}
-              onLeadClick={setSelectedLead}
-            />
+              layout
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            >
+              <KanbanColumn
+                status={status}
+                leads={getColumnLeads(status)}
+                onLeadClick={setSelectedLead}
+              />
+            </motion.div>
           ))}
         </div>
 

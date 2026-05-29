@@ -3,6 +3,7 @@ import { Work_Sans, Space_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const workSans = Work_Sans({
@@ -38,7 +39,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${workSans.variable} ${spaceMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#0B1320] text-white">
+      <body className="min-h-full flex flex-col bg-zinc-950 text-white">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -46,7 +47,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {children}
+            <TooltipProvider>
+              {children}
+            </TooltipProvider>
           </AuthProvider>
           <Toaster
             position="top-right"

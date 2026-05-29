@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Lead } from "@/types/lead";
@@ -33,13 +34,17 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
   const statusColor = STATUS_FUNIL_COLORS[lead.status] || "#1E3A5F";
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
       onClick={() => onClick?.(lead)}
-      className="bg-[#0B1320] rounded-lg border border-[#1E293B] p-3 cursor-grab active:cursor-grabbing hover:border-[#1F7A8C]/50 transition-colors group"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
+      className="bg-zinc-950 rounded-lg border border-zinc-800 p-3 cursor-grab active:cursor-grabbing hover:border-[#1F7A8C]/50 transition-colors group"
     >
       {/* Status Indicator */}
       <div className="flex items-center gap-2 mb-2">
@@ -89,9 +94,9 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
       </div>
 
       {/* Hover hint */}
-      <div className="mt-2 pt-2 border-t border-[#1E293B] opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="mt-2 pt-2 border-t border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity">
         <span className="text-[10px] text-[#1F7A8C]">Arraste para mover</span>
       </div>
-    </div>
+    </motion.div>
   );
 }

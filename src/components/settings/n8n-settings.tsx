@@ -8,7 +8,11 @@ import { Webhook } from "lucide-react";
 
 interface N8nSettingsProps {
   initialSecret: string | null;
-  onSave: (data: { webhookSecret: string }) => Promise<void>;
+  onSave: (data: {
+    webhookSecret: string;
+    proposalWebhookUrl?: string;
+    killswitchWebhookUrl?: string;
+  }) => Promise<void>;
 }
 
 export function N8nSettings({
@@ -16,19 +20,25 @@ export function N8nSettings({
   onSave,
 }: N8nSettingsProps) {
   const [webhookSecret, setWebhookSecret] = useState(initialSecret || "");
+  const [proposalWebhookUrl, setProposalWebhookUrl] = useState("");
+  const [killswitchWebhookUrl, setKillswitchWebhookUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!webhookSecret) return;
     setSaving(true);
-    await onSave({ webhookSecret });
+    await onSave({
+      webhookSecret,
+      proposalWebhookUrl: proposalWebhookUrl || undefined,
+      killswitchWebhookUrl: killswitchWebhookUrl || undefined,
+    });
     setSaving(false);
   };
 
   return (
     <ServiceCard
       title="n8n"
-      description="Automação para receber leads raspados via webhook"
+      description="Automação para receber leads raspados e webhooks de Kill Switch"
       icon={<Webhook className="w-5 h-5 text-[#1F7A8C]" />}
       configured={!!initialSecret}
     >
@@ -43,6 +53,34 @@ export function N8nSettings({
             placeholder="Seu secret compartilhado"
             value={webhookSecret}
             onChange={(e) => setWebhookSecret(e.target.value)}
+            className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono text-sm"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="n8n-proposal-url" className="text-[#94A3B8] text-xs">
+            Webhook de Propostas (URL)
+          </Label>
+          <Input
+            id="n8n-proposal-url"
+            type="url"
+            placeholder="https://n8n.exemplo.com/webhook/proposta"
+            value={proposalWebhookUrl}
+            onChange={(e) => setProposalWebhookUrl(e.target.value)}
+            className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono text-sm"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="n8n-killswitch-url" className="text-[#94A3B8] text-xs">
+            Webhook Kill Switch (URL)
+          </Label>
+          <Input
+            id="n8n-killswitch-url"
+            type="url"
+            placeholder="https://n8n.exemplo.com/webhook/killswitch"
+            value={killswitchWebhookUrl}
+            onChange={(e) => setKillswitchWebhookUrl(e.target.value)}
             className="bg-[#0B1320] border-[#1E293B] text-white placeholder:text-[#64748B] font-mono text-sm"
           />
         </div>

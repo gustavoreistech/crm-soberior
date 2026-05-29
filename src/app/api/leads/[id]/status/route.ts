@@ -49,6 +49,13 @@ export async function PATCH(
       include: { organization: true },
     });
 
+    if (!updatedLead.organization) {
+      return NextResponse.json(
+        { success: false, error: "Organização não encontrada" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {
